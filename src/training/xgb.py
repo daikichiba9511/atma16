@@ -1,4 +1,5 @@
 import pathlib
+import pprint
 from logging import getLogger
 from typing import Any, Protocol
 
@@ -45,9 +46,14 @@ def train_one_fold(cfg: XGBTrainCFG, fold: int, train_df: pl.DataFrame, valid_df
     logger.info(f"train_label_cnts: {train_df['target'].value_counts()}")
     logger.info(f"valid_label_cnts: {valid_df['target'].value_counts()}")
 
+    not_used_columns = ["session_id", "yad_no", "fold", "target"]
+    train_df_ = train_df.drop(not_used_columns)
+    valid_df_ = valid_df.drop(not_used_columns)
 
-    dtrain = xgb.DMatrix(train_df.drop(["target", "session_id", "yad_no"]), label=train_df["target"])
-    dvalid = xgb.DMatrix(valid_df.drop(["target", "session_id", "yad_no"]), label=valid_df["target"])
+    logger.info(f"Used Columns: \n{pprint.pformat(train_df_.columns)}")
+
+    dtrain = xgb.DMatrix(train_df_, label=train_df["target"])
+    dvalid = xgb.DMatrix(valid_df_, label=valid_df["target"])
 
     num_boost_round = 1000
     model = xgb.train(
