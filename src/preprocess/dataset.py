@@ -1,5 +1,6 @@
 from logging import getLogger
 
+import numpy as np
 import polars as pl
 
 from src.preprocess import candidates, session_features, yad_features
@@ -14,6 +15,7 @@ def make_dataset(
     test_log_df: pl.DataFrame,
     train_label_df: pl.DataFrame,
     session_ids: list[str],
+    covisit_matrix: np.ndarray,
 ) -> pl.DataFrame:
     """make dataframe for session_ids
 
@@ -29,30 +31,38 @@ def make_dataset(
 
     log_df = pl.concat([train_log_df, test_log_df], how="vertical").drop_nulls()
 
+    # make features_df
+    session_features_df = session_features.make_session_featuers(phase, log_df, session_ids)
+    yad_features_df = yad_features.make_yad_features(yad_df)
+
     def _make_candidates():
-        """候補生成の集約
+        """session_idごとじゃない候補生成の集約
 
         TODO:
             * make_covisit.pyで作った共起行列の情報を使って候補を出す
         """
         popular_candidates = candidates.make_popular_candidates(log_df, train_label_df)
+        # 共起行列を使って候補を生成する
+        # covisit_yad_dict = candidates.make_covisit_candidates(df, covisit_matrix, k=10)
         return popular_candidates
 
-    candidates_for_a_session_id = _make_candidates()
-
-    # make features_df
-    session_features_df = session_features.make_session_featuers(phase, log_df, session_ids)
-    yad_features_df = yad_features.make_yad_features(yad_df)
+    candidates_ = _make_candidates()
+    # 過去に見たことのあるyad_noを候補として追加する
+    candidates_for_a_session_id = candidates.make_seen_candidates(log_df, session_ids)
 
     # make pairs of (session_id, yad_no)
     df = (
         pl.DataFrame({"session_id": session_ids})
         .with_columns([
             pl.col("session_id"),
-            pl.Series("yad_no", [candidates_for_a_session_id for _ in range(len(session_ids))], dtype=pl.List),
+            pl.Series("yad_no", [candidates_ for _ in range(len(session_ids))], dtype=pl.List),
         ])
         .explode("yad_no")
     )
+    df = df.join(candidates_for_a_session_id, on="session_id", how="left")
+
+    # 同じ候補は消す
+    df = df.unique(subset=["session_id", "yad_no"]).select(["session_id", "yad_no"])
 
     # attach features
     df = df.join(session_features_df, on="session_id", how="left").join(yad_features_df, on="yad_no", how="left")
@@ -60,7 +70,7 @@ def make_dataset(
     # TODO: 後でちゃんと処理を考える
     # nullの情報を落とす
     logger.info(f"before drop_nulls: {df.shape}")
-    need_null_processing_cols = 'cd'
+    need_null_processing_cols = "cd"
     df = df.select([pl.col(col) for col in df.columns if not col.endswith(need_null_processing_cols)])
     logger.info(f"after drop_nulls: {df.shape}")
 
@@ -84,7 +94,7 @@ def make_target(featured_pair_df: pl.DataFrame, train_label_df: pl.DataFrame) ->
     return df
 
 
-def negative_sampling(df: pl.DataFrame, sampling_rate: float)-> pl.DataFrame:
+def negative_sampling(df: pl.DataFrame, sampling_rate: float) -> pl.DataFrame:
     """negative sampling
 
     Args:
@@ -103,7 +113,7 @@ def _test_make_dataframe():
     from src.utils.common import trace
     from src.utils.logger import get_root_logger
 
-    logger = get_root_logger()
+    _ = get_root_logger()
 
     pl.Config.set_tbl_cols(100)
 
@@ -111,6 +121,7 @@ def _test_make_dataframe():
     train_label_df = pl.read_csv(constants.INPUT_DIR / "train_label.csv")
     yad_df = pl.read_csv(constants.INPUT_DIR / "yado.csv")
     test_log_df = pl.read_csv(constants.INPUT_DIR / "test_log.csv")
+    covisit_matrix = np.load(constants.OUTPUT_DIR / "covisit" / "covisit_matrix.npy")
     with trace("making dataframe..."):
         train_df = make_dataset(
             phase="train",
@@ -119,6 +130,7 @@ def _test_make_dataframe():
             test_log_df=test_log_df,
             train_label_df=train_label_df,
             session_ids=train_label_df["session_id"].unique().to_list(),
+            covisit_matrix=covisit_matrix,
         )
         train_df = make_target(train_df, train_label_df)
         print("TRAIN_DF: ", train_df)

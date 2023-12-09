@@ -2,8 +2,10 @@ import argparse
 import pprint
 from logging import INFO
 
+import numpy as np
 import polars as pl
 
+from src import constants
 from src.config.common import load_config
 from src.preprocess import dataset
 from src.training import xgb
@@ -36,6 +38,7 @@ def main() -> None:
     def _make_folded_df():
         # リソースの開放のために関数にしている
         dfs = load_dataframes()
+        covisit_matrix = np.load(constants.OUTPUT_DIR / "covisit" / "covisit_matrix.npy")
         if args.debug:
             dfs = dfs.sample(n=1000)
         df = dataset.make_dataset(
@@ -45,6 +48,7 @@ def main() -> None:
             test_log_df=dfs.test_log_df,
             train_label_df=dfs.train_label_df,
             session_ids=dfs.train_label_df["session_id"].unique().to_list(),
+            covisit_matrix=covisit_matrix,
         )
         df = dataset.make_target(df, dfs.train_label_df)
         folded_df = pl.DataFrame._from_pandas(make_fold(df, n_splits=cfg.n_splits))

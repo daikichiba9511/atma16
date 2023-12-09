@@ -24,20 +24,18 @@ def make_session_featuers(phase: str, log_df: pl.DataFrame, session_ids: list[st
     # 最後に見たyad_no
     # TODO: 単純にいれるよりはたぶん埋め込みつくったほうがいい
     # 単純に埋め込むと次元数が膨れ上がる
-    last_seen_yad_no_df = (
-        filtered_log_df.sort(by="seq_no", descending=True)
-        .group_by("session_id")
-        .agg(pl.first("yad_no").alias("last_seen_yad_no"))
-    )
+    # last_seen_yad_no_df = (
+    #     filtered_log_df.sort(by="seq_no", descending=True)
+    #     .group_by("session_id")
+    #     .agg(pl.first("yad_no").alias("last_seen_yad_no"))
+    # )
 
-    print(f"{session_length_df = }")
-    print(f"{last_seen_yad_no_df = }")
 
     # attach session features
     session_df = (
         pl.DataFrame({"session_id": session_ids})
         .join(session_length_df, on="session_id", how="left")
-        .join(last_seen_yad_no_df, on="session_id", how="left")
+        # .join(last_seen_yad_no_df, on="session_id", how="left")
     )
     return session_df
 

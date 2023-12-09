@@ -6,7 +6,7 @@ from src.preprocess.dataset import make_dataset
 from src.training.common import DataFrames
 
 
-def predict(models, session_ids: list[str], dfs: DataFrames) -> pl.DataFrame:
+def predict(models, session_ids: list[str], dfs: DataFrames, covisit_matrix: np.ndarray) -> pl.DataFrame:
     """
 
     Returns:
@@ -21,6 +21,7 @@ def predict(models, session_ids: list[str], dfs: DataFrames) -> pl.DataFrame:
         yad_df=dfs.yad_df,
         train_log_df=dfs.train_log_df,
         test_log_df=dfs.test_log_df,
+        covisit_matrix=covisit_matrix,
     )
     print(dataset)
 
@@ -40,9 +41,7 @@ def predict(models, session_ids: list[str], dfs: DataFrames) -> pl.DataFrame:
     ranking = pl.concat(
         [dataset[["session_id", "yad_no"]], pl.DataFrame({"y_preds": y_preds.reshape(-1)})], how="horizontal"
     )
-    print(ranking)
     ranking = ranking.sort(by="y_preds", descending=True)
-    print(ranking)
     preds = ranking.group_by("session_id").head(10)
     return preds
 
@@ -72,6 +71,9 @@ def make_submission(preds: pl.DataFrame) -> pl.DataFrame:
     # | ---------- | ------  |
     # | sample     | [1,2,3] |
     df = df.group_by("session_id").agg(pl.col("yad_no"))
+    df = (
+        df.lazy().with_columns(*[pl.col("yad_no").list.get(i).alias(f"predict_{i}") for i in range(10)]).collect()
+    )
     return df
 
 
@@ -95,16 +97,22 @@ def _test_predict():
     sub = make_submission(preds)
     print("SUB: ", sub)
 
-    label = pl.DataFrame({"session_id": session_ids}).join(
-        dfs.train_label_df.filter(pl.col("session_id").is_in(session_ids)), how="left", on="session_id"
-    )["yad_no"].to_list()
-    sub = pl.DataFrame({"session_id": session_ids}).join(
-        sub, how="left", on="session_id"
-    ).select(["session_id", "yad_no"])
+    label = (
+        pl.DataFrame({"session_id": session_ids})
+        .join(dfs.train_label_df.filter(pl.col("session_id").is_in(session_ids)), how="left", on="session_id")
+    )
+    sub = (
+        pl.DataFrame({"session_id": session_ids})
+        .join(sub, how="left", on="session_id")
+    )
     print("LABEL: ", label)
     print("SUB: ", sub)
 
-    map10 = metrics.mean_average_precision_at_k(label, sub["yad_no"].to_list(), k=10)
+    map10 = metrics.mean_average_precision_at_k(
+        label["yad_no"].to_list(),
+        sub["yad_no"].to_list(),
+        k=10
+    )
     print("MAP@10: ", map10)
 
 

@@ -1,5 +1,6 @@
 import argparse
 
+import numpy as np
 import polars as pl
 import xgboost as xgb
 
@@ -18,6 +19,7 @@ def parse() -> argparse.Namespace:
     parser.add_argument("--remake", action="store_true")
     return parser.parse_args()
 
+
 def main():
     args = parse()
     cfg = load_config(args.config)
@@ -29,27 +31,38 @@ def main():
 
     dfs = load_dataframes()
     model = xgb.Booster()
-    wpath = constants.OUTPUT_DIR / "exp000" / "xgb_model_fold0.ubj"
+
+    wpath = constants.OUTPUT_DIR / args.config / "xgb_model_fold0.ubj"
     print(wpath)
     if wpath.exists():
         print("LOAD MODEL FROM: ", wpath)
         model.load_model(str(wpath))
     models = [model]
 
-    preds = predict(models, session_ids, dfs)
+    covisit_matrix = np.load(constants.OUTPUT_DIR / "covisit" / "covisit_matrix.npy")
+    preds = predict(models, session_ids, dfs, covisit_matrix=covisit_matrix)
     sub = make_submission(preds)
 
     label = pl.DataFrame({"session_id": session_ids}).join(
         dfs.train_label_df.filter(pl.col("session_id").is_in(session_ids)), how="left", on="session_id"
-    )["yad_no"].to_list()
-    sub = pl.DataFrame({"session_id": session_ids}).join(
-        sub, how="left", on="session_id"
-    ).select(["session_id", "yad_no"])
-    print("LABEL: ", label)
-    print("SUB: ", sub)
+    )
+    sub = (
+        pl.DataFrame({"session_id": session_ids})
+        .join(sub, how="left", on="session_id")
+        .select(["session_id", "yad_no"])
+    )
 
-    map10 = metrics.mean_average_precision_at_k(label, sub["yad_no"].to_list(), k=10)
+    map10 = metrics.mean_average_precision_at_k(label["yad_no"].to_list(), sub["yad_no"].to_list(), k=10)
     print("MAP@10: ", map10)
+
+    oof_cv_df = label.join(
+        sub.explode("yad_no").with_columns(pl.col("yad_no").alias("predict")).select(["session_id", "predict"]),
+        how="left",
+        on="session_id",
+    )
+    print(oof_cv_df)
+    oof_cv_df.write_csv(constants.OUTPUT_DIR / args.config / f"cv_fold{args.fold}.csv")
+
 
 if __name__ == "__main__":
     main()

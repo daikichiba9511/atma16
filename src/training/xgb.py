@@ -38,8 +38,11 @@ def train_one_fold(cfg: XGBTrainCFG, fold: int, train_df: pl.DataFrame, valid_df
 
     """
     logger.info(f"Training start fold={fold}")
+
+    # negative sampling
+    # クラス不均衡なのでnegative samplingを行う
     logger.info(f"Before negative_sampling: {train_df.shape}")
-    train_df = negative_sampling(train_df, sampling_rate=0.2)
+    train_df = negative_sampling(train_df, sampling_rate=0.001)
     logger.info(f"After negative_sampling: {train_df.shape}")
 
     logger.info(f"train_df shape: {train_df.shape}, valid_df shape: {valid_df.shape}")
@@ -55,12 +58,12 @@ def train_one_fold(cfg: XGBTrainCFG, fold: int, train_df: pl.DataFrame, valid_df
     dtrain = xgb.DMatrix(train_df_, label=train_df["target"])
     dvalid = xgb.DMatrix(valid_df_, label=valid_df["target"])
 
-    num_boost_round = 1000
+    num_boost_round = 5000
     model = xgb.train(
         params=cfg.xgb_params,
         dtrain=dtrain,
         num_boost_round=num_boost_round,
         evals=[(dtrain, "train"), (dvalid, "valid")],
-        verbose_eval=num_boost_round // 50,
+        verbose_eval=num_boost_round // 100,
     )
     model.save_model(str(cfg.output_dir / f"xgb_model_fold{fold}.ubj"))
