@@ -31,11 +31,8 @@ def make_dataset(
 
     log_df = pl.concat([train_log_df, test_log_df], how="vertical").drop_nulls()
 
-
     def _make_candidates():
-        """session_idごとじゃない候補生成の集約
-
-        """
+        """session_idごとじゃない候補生成の集約"""
         popular_candidates = candidates.make_popular_candidates(log_df, train_label_df)
         return popular_candidates
 

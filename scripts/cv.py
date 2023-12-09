@@ -14,6 +14,7 @@ from src.utils.logger import get_root_logger
 
 logger = get_root_logger()
 
+
 def parse() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="exp000")

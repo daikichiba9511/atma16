@@ -54,9 +54,10 @@ def make_seen_candidates(log_df: pl.DataFrame, session_ids: list[str]) -> pl.Dat
     """
     # 最後に見たyad_noは候補から除外しておく
     seen_history_for_a_session_id = (
-        log_df.filter(pl.col("session_id").is_in(session_ids)).group_by("session_id").agg(pl.col("yad_no")).apply(lambda x: x[:-1])
+        log_df.filter(pl.col("session_id").is_in(session_ids)).group_by("session_id").agg(pl.col("yad_no"))
     ).explode("yad_no")
     print("seen_history_for_a_session_id: ", seen_history_for_a_session_id)
+    raise ValueError
     return seen_history_for_a_session_id
 
 
