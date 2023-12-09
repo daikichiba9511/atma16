@@ -19,6 +19,7 @@ def parse() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="exp000")
     parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--remake", action="store_true")
     return parser.parse_args()
 
 
@@ -45,13 +46,24 @@ def main() -> None:
             train_label_df=dfs.train_label_df,
             session_ids=dfs.train_label_df["session_id"].unique().to_list(),
         )
-        folded_df = make_fold(df, n_splits=cfg.n_splits)
-        return pl.DataFrame._from_pandas(folded_df)
+        df = dataset.make_target(df, dfs.train_label_df)
+        folded_df = pl.DataFrame._from_pandas(make_fold(df, n_splits=cfg.n_splits))
+        return folded_df
 
-    df = _make_folded_df()
+    # TODO: ファイル分けたほうがいいかも, もっと良い効率的なdfの作り方ある
+    folded_df_cache_path = cfg.input_dir / f"folded{cfg.n_splits}_df.parquet"
+    if args.remake:
+        df = _make_folded_df()
+        df.write_parquet(folded_df_cache_path)
+    else:
+        df = pl.read_parquet(folded_df_cache_path)
+
     for fold in range(cfg.n_splits):
         xgb.train_one_fold(
-            cfg=cfg, fold=fold, train_df=df.filter(pl.col("fold") != fold), valid_df=df.filter(pl.col("fold") == fold)
+            cfg=cfg,
+            fold=fold,
+            train_df=df.filter(pl.col("fold") != fold),
+            valid_df=df.filter(pl.col("fold") == fold),
         )
         break
 

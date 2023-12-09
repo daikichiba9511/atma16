@@ -42,8 +42,9 @@ def _test_make_fold():
         train_label_df=dfs.train_label_df,
         session_ids=dfs.train_label_df["session_id"].unique().to_list(),
     )
-    print(df)
     folded_df = make_fold(df, n_splits=5)
+
+    print(df)
     print(folded_df)
     print(folded_df["fold"].value_counts())
     print(folded_df.groupby("fold")["target"].value_counts())

@@ -26,6 +26,7 @@ def make_dataset(
     log_df = pl.concat([train_log_df, test_log_df], how="vertical").drop_nulls()
 
     def _make_candidates():
+        """候補生成の集約"""
         popular_candidates = candidates.make_popular_candidates(log_df, train_label_df)
         return popular_candidates
 
@@ -48,13 +49,23 @@ def make_dataset(
     # attach features
     df = df.join(session_features_df, on="session_id", how="left").join(yad_features_df, on="yad_no", how="left")
 
-    # make label
-    # trainに存在するときは1, そうじゃないときはnullになるので0で埋める
-    target_df = log_df.select(["session_id", "yad_no"]).with_columns(pl.lit(1).alias("target"))
-    df = df.join(target_df, on=["session_id", "yad_no"], how="left").with_columns(
+    return df
+
+
+def make_target(featured_pair_df: pl.DataFrame, train_label_df: pl.DataFrame) -> pl.DataFrame:
+    """make target dataframe
+
+    Args:
+        featured_pair_df: dataframe with session_id, yad_no and features
+        train_label_df: train_label.csv
+
+    Returns:
+        dataframe with session_id, yad_no and target
+    """
+    target_df = train_label_df.select(["session_id", "yad_no"]).with_columns(pl.lit(1).alias("target"))
+    df = featured_pair_df.join(target_df, on=["session_id", "yad_no"], how="left").with_columns(
         pl.col("target").fill_null(0).alias("target")
     )
-
     return df
 
 
