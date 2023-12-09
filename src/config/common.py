@@ -1,8 +1,11 @@
 import importlib
-from typing import Any
+from typing import TypeAlias
 
+from src.config import exp000
 
-def load_config(config_name: str) -> Any:
+Configs: TypeAlias = exp000.Config
+
+def load_config(config_name: str) -> Configs:
     """config_nameに対応するConfigクラスを返す"""
     config = importlib.import_module(f"src.config.{config_name}").Config()
     return config
