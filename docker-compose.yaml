@@ -1,0 +1,24 @@
+version: '3'
+services:
+  local:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    image: kaggle-local-base-otto
+    container_name: kaggle-local-base-container-otto
+    shm_size: 120g
+    ports:
+      - "127.0.0.1:8892:8892"
+    tty: true
+    stdin_open: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [ utility, compute, video ]
+    volumes:
+      - .:/workspace/working
+      - ${HOME}/.ssh:/root/.ssh
+      - ${HOME}/.gitconfig:${HOME}/.gitconfig:ro
+      - ${HOME}/.config/git/ignore:${HOME}/.config/git/ignore:ro
