@@ -43,8 +43,6 @@ def predict(models, session_ids: list[str], dfs: DataFrames, covisit_matrix: np.
         if isinstance(model, xgb.Booster):
             data = xgb.DMatrix(dataset.drop(["session_id", "yad_no"]))
             y_pred = model.predict(data).reshape(-1, 1)
-            y_pred = 1 / (1 + np.exp(-y_pred))
-            print(y_pred.shape)
             y_preds += y_pred
         else:
             raise NotImplementedError

@@ -53,7 +53,7 @@ def make_dataset(
 
     # 同じ候補は消す
     df = df.unique(subset=["session_id", "yad_no"]).select(["session_id", "yad_no"])
-    df = candidates.make_covisit_candidates(df, covisit_matrix, k=30)
+    df = candidates.make_covisit_candidates(df, covisit_matrix, k=10)
 
     # make features_df
     session_features_df = session_features.make_session_featuers(phase, log_df, session_ids)

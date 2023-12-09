@@ -57,7 +57,9 @@ def main() -> None:
     # TODO: ファイル分けたほうがいいかも, もっと良い効率的なdfの作り方ある
     folded_df_cache_path = cfg.input_dir / f"folded{cfg.n_splits}_df.parquet"
     if args.remake:
-        df = _make_folded_df()
+        logger.info("remake folded_df")
+        with utils_common.trace("making folded_df..."):
+            df = _make_folded_df()
         df.write_parquet(folded_df_cache_path)
     else:
         df = pl.read_parquet(folded_df_cache_path)

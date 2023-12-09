@@ -54,10 +54,12 @@ def make_seen_candidates(log_df: pl.DataFrame, session_ids: list[str]) -> pl.Dat
     """
     # 最後に見たyad_noは候補から除外しておく
     seen_history_for_a_session_id = (
-        log_df.filter(pl.col("session_id").is_in(session_ids)).group_by("session_id").agg(pl.col("yad_no"))
-    ).explode("yad_no")
-    print("seen_history_for_a_session_id: ", seen_history_for_a_session_id)
-    raise ValueError
+        log_df.filter(pl.col("session_id").is_in(session_ids)).group_by("session_id").agg(pl.col("yad_no")).apply(lambda x: (x[0], x[1][:-1]))
+        .with_columns(pl.col("column_0").alias("session_id"), pl.col("column_1").alias("yad_no"))
+        .select(["session_id", "yad_no"])
+    )
+    seen_history_for_a_session_id = seen_history_for_a_session_id.explode("yad_no").drop_nulls()
+    # print("seen_history_for_a_session_id: ", seen_history_for_a_session_id)
     return seen_history_for_a_session_id
 
 
@@ -66,8 +68,12 @@ def make_covisit_candidates(df: pl.DataFrame, covist_matrix: np.ndarray, k: int)
 
     共起行列を使ってｋ個候補を生成する.
     """
+    df_ = df.clone().select(["session_id", "yad_no"])
+
+    # dict[yad_no, list[covisit_yad_no]]
     yad_covisit_dict = {yad_no: [] for yad_no in range(covist_matrix.shape[0])}
     for i in range(len(covist_matrix)):
+        # i番目のyad_noについて, 共起するyad_noを頻度の多い順位にk個取得する
         yad_covisit = np.argsort(covist_matrix[i])[::-1][:k]
         yad_covisit_dict[i].extend(yad_covisit.tolist())
 
@@ -80,7 +86,6 @@ def make_covisit_candidates(df: pl.DataFrame, covist_matrix: np.ndarray, k: int)
         "covisit_yad_no": list(yad_covisit_dict.values()),
     })
 
-    df_ = df.clone().select(["session_id", "yad_no"])
     df = (
         df.join(covisit_df, on="yad_no", how="left")
         .explode("covisit_yad_no")  # listを展開

@@ -21,7 +21,6 @@ def make_yad_features(yad_df: pl.DataFrame) -> pl.DataFrame:
                 * karaoke_flg: カラオケがあるかないか
                 * sml_cd: 小エリアコード
     """
-    print("YadoType: ", yad_df["yad_type"].value_counts())
     _yad_df = yad_df.clone()
     # 欠損値処理
     # 欠損値は欠損値以外で算出した平均値で埋めて、欠損値フラグを作る
