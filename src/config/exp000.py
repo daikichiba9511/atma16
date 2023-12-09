@@ -27,10 +27,13 @@ class Config:
     xgb_params: dict[str, str | int | float] = dataclasses.field(
         default_factory=lambda: {
             "objective": "rank:pairwise",
-            "tree_method": "gpu_hist",
+            "tree_method": "hist",
             "random_state": 42,
-            "gpu_id": 0,
-            "learning_rate": 0.05,
+            "max_depth": 10,
+            "learning_rate": 0.1,
             "verbosity": 1,
+            "device": "cuda",  # gpuでの学習に必要
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
         }
     )

@@ -11,6 +11,7 @@ setup: ## setup install packages
 		curl -sSf https://rye-up.com/get | bash; \
 		echo "source ${HOME}/.rye/env" > ~/.profile; \
 	fi;
+	@source ~/.profile
 	@rye sync
 
 

@@ -36,9 +36,11 @@ def train_one_fold(cfg: XGBTrainCFG, fold: int, train_df: pl.DataFrame, valid_df
     """
     logger.info(f"Training start fold={fold}")
     logger.info(f"train_df shape: {train_df.shape}, valid_df shape: {valid_df.shape}")
+    logger.info(f"train_label_cnts: {train_df['target'].value_counts()}")
+    logger.info(f"valid_label_cnts: {valid_df['target'].value_counts()}")
 
-    dtrain = xgb.DMatrix(train_df.drop(["target"]), label=train_df["target"])
-    dvalid = xgb.DMatrix(valid_df.drop(["target"]), label=valid_df["target"])
+    dtrain = xgb.DMatrix(train_df.drop(["target", "session_id", "yad_no"]), label=train_df["target"])
+    dvalid = xgb.DMatrix(valid_df.drop(["target", "session_id", "yad_no"]), label=valid_df["target"])
 
     num_boost_round = 1000
     model = xgb.train(
@@ -46,6 +48,6 @@ def train_one_fold(cfg: XGBTrainCFG, fold: int, train_df: pl.DataFrame, valid_df
         dtrain=dtrain,
         num_boost_round=num_boost_round,
         evals=[(dtrain, "train"), (dvalid, "valid")],
-        varbose_eval=num_boost_round // 50,
+        verbose_eval=num_boost_round // 50,
     )
-    model.save_model(str(cfg.output_dir / f"model_fold{fold}.xgb"))
+    model.save_model(str(cfg.output_dir / f"xgb_model_fold{fold}.ubj"))
