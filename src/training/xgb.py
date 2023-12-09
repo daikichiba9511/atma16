@@ -5,6 +5,8 @@ from typing import Any, Protocol
 import polars as pl
 import xgboost as xgb
 
+from src.preprocess.dataset import negative_sampling
+
 logger = getLogger(__name__)
 
 
@@ -35,9 +37,14 @@ def train_one_fold(cfg: XGBTrainCFG, fold: int, train_df: pl.DataFrame, valid_df
 
     """
     logger.info(f"Training start fold={fold}")
+    logger.info(f"Before negative_sampling: {train_df.shape}")
+    train_df = negative_sampling(train_df, sampling_rate=0.2)
+    logger.info(f"After negative_sampling: {train_df.shape}")
+
     logger.info(f"train_df shape: {train_df.shape}, valid_df shape: {valid_df.shape}")
     logger.info(f"train_label_cnts: {train_df['target'].value_counts()}")
     logger.info(f"valid_label_cnts: {valid_df['target'].value_counts()}")
+
 
     dtrain = xgb.DMatrix(train_df.drop(["target", "session_id", "yad_no"]), label=train_df["target"])
     dvalid = xgb.DMatrix(valid_df.drop(["target", "session_id", "yad_no"]), label=valid_df["target"])

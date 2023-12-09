@@ -84,6 +84,20 @@ def make_target(featured_pair_df: pl.DataFrame, train_label_df: pl.DataFrame) ->
     return df
 
 
+def negative_sampling(df: pl.DataFrame, sampling_rate: float)-> pl.DataFrame:
+    """negative sampling
+
+    Args:
+        df: dataframe with session_id, yad_no and target
+        sampling_rate: sampling rate
+    """
+
+    positive_df = df.filter(pl.col("target") == 1)
+    negative_df = df.filter(pl.col("target") == 0).sample(fraction=sampling_rate)
+    df_ = pl.concat([positive_df, negative_df], how="vertical")
+    return df_
+
+
 def _test_make_dataframe():
     from src import constants
     from src.utils.common import trace
