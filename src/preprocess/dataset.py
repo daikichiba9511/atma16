@@ -1,4 +1,3 @@
-import numpy as np
 import polars as pl
 
 from src.preprocess import candidates, session_features, yad_features
@@ -23,19 +22,18 @@ def make_dataset(
         train_label_df: train_label.csv
         session_ids: session_ids for train or test
     """
+
     log_df = pl.concat([train_log_df, test_log_df], how="vertical").drop_nulls()
-    popular_candidates = candidates.make_popular_candidates(log_df, train_label_df)
-    candidates_for_a_session_id = popular_candidates
-    print(f"candidates_for_a_session_id: {candidates_for_a_session_id.dtype}, {candidates_for_a_session_id.shape}")
 
-    if any(np.isnan(candidates_for_a_session_id)):
-        # test
-        raise ValueError("session_ids contains nan")
+    def _make_candidates():
+        popular_candidates = candidates.make_popular_candidates(log_df, train_label_df)
+        return popular_candidates
 
+    candidates_for_a_session_id = _make_candidates()
+
+    # make features_df
     session_features_df = session_features.make_session_featuers(phase, log_df, session_ids)
     yad_features_df = yad_features.make_yad_features(yad_df)
-
-    target_df = log_df.select(["session_id", "yad_no"]).with_columns(pl.lit(1).alias("target"))
 
     # make pairs of (session_id, yad_no)
     df = (
@@ -51,6 +49,8 @@ def make_dataset(
     df = df.join(session_features_df, on="session_id", how="left").join(yad_features_df, on="yad_no", how="left")
 
     # make label
+    # trainに存在するときは1, そうじゃないときはnullになるので0で埋める
+    target_df = log_df.select(["session_id", "yad_no"]).with_columns(pl.lit(1).alias("target"))
     df = df.join(target_df, on=["session_id", "yad_no"], how="left").with_columns(
         pl.col("target").fill_null(0).alias("target")
     )

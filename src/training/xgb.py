@@ -19,7 +19,7 @@ class XGBTrainCFG(Protocol):
 
 
 def train_one_fold(cfg: XGBTrainCFG, fold: int, train_df: pl.DataFrame, valid_df: pl.DataFrame) -> None:
-    """1fold training
+    """1fold training, and then save model
 
     1. split train/valid data by session_id
     2. create candidates
@@ -30,6 +30,9 @@ def train_one_fold(cfg: XGBTrainCFG, fold: int, train_df: pl.DataFrame, valid_df
     Args:
         cfg: XGBTrainCFG
         fold: fold number
+        train_df: train dataframe
+        valid_df: valid dataframe
+
     """
     logger.info(f"Training start fold={fold}")
     logger.info(f"train_df shape: {train_df.shape}, valid_df shape: {valid_df.shape}")
