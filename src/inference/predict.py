@@ -1,9 +1,14 @@
+from logging import getLogger
+
 import numpy as np
 import polars as pl
 import xgboost as xgb
 
+from src import constants
 from src.preprocess.dataset import make_dataset
 from src.training.common import DataFrames
+
+logger = getLogger(__name__)
 
 
 def predict(models, session_ids: list[str], dfs: DataFrames, covisit_matrix: np.ndarray) -> pl.DataFrame:
@@ -23,7 +28,14 @@ def predict(models, session_ids: list[str], dfs: DataFrames, covisit_matrix: np.
         test_log_df=dfs.test_log_df,
         covisit_matrix=covisit_matrix,
     )
-    print(dataset)
+
+    logger.info(f"dataset shape: {dataset.head(10)}")
+
+    dataset.write_csv(constants.OUTPUT_DIR / "dataset.csv")
+    # print(dataset)
+    # print(dataset.filter(pl.col("session_id") == "69cd6d9f3a24fcfe746b5a08bbf24a95"))
+    # print(dataset.filter(pl.col("session_id") == "69cd6d9f3a24fcfe746b5a08bbf24a95")["yad_no"].unique())
+    # print(3789 in dataset.filter(pl.col("session_id") == "69cd6d9f3a24fcfe746b5a08bbf24a95")["yad_no"].unique())
 
     # 予測
     y_preds = np.zeros((len(dataset), 1))
@@ -71,9 +83,7 @@ def make_submission(preds: pl.DataFrame) -> pl.DataFrame:
     # | ---------- | ------  |
     # | sample     | [1,2,3] |
     df = df.group_by("session_id").agg(pl.col("yad_no"))
-    df = (
-        df.lazy().with_columns(*[pl.col("yad_no").list.get(i).alias(f"predict_{i}") for i in range(10)]).collect()
-    )
+    df = df.lazy().with_columns(*[pl.col("yad_no").list.get(i).alias(f"predict_{i}") for i in range(10)]).collect()
     return df
 
 
@@ -93,26 +103,18 @@ def _test_predict():
         model.load_model(str(wpath))
     models = [model]
     session_ids = dfs.train_label_df["session_id"].unique().to_list()[:10]
-    preds = predict(models, session_ids, dfs)
+    covisit_matrix = np.load(constants.OUTPUT_DIR / "covisit" / "covisit_matrix.npy")
+    preds = predict(models, session_ids, dfs, covisit_matrix=covisit_matrix)
     sub = make_submission(preds)
-    print("SUB: ", sub)
 
-    label = (
-        pl.DataFrame({"session_id": session_ids})
-        .join(dfs.train_label_df.filter(pl.col("session_id").is_in(session_ids)), how="left", on="session_id")
+    label = pl.DataFrame({"session_id": session_ids}).join(
+        dfs.train_label_df.filter(pl.col("session_id").is_in(session_ids)), how="left", on="session_id"
     )
-    sub = (
-        pl.DataFrame({"session_id": session_ids})
-        .join(sub, how="left", on="session_id")
-    )
+    sub = pl.DataFrame({"session_id": session_ids}).join(sub, how="left", on="session_id")
     print("LABEL: ", label)
     print("SUB: ", sub)
 
-    map10 = metrics.mean_average_precision_at_k(
-        label["yad_no"].to_list(),
-        sub["yad_no"].to_list(),
-        k=10
-    )
+    map10 = metrics.mean_average_precision_at_k(label["yad_no"].to_list(), sub["yad_no"].to_list(), k=10)
     print("MAP@10: ", map10)
 
 

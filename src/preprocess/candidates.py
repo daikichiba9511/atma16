@@ -52,9 +52,11 @@ def make_seen_candidates(log_df: pl.DataFrame, session_ids: list[str]) -> pl.Dat
     すでに見たことのあるyad_noを候補として返す.
 
     """
+    # 最後に見たyad_noは候補から除外しておく
     seen_history_for_a_session_id = (
-        log_df.filter(pl.col("session_id").is_in(session_ids)).group_by("session_id").agg(pl.col("yad_no"))
+        log_df.filter(pl.col("session_id").is_in(session_ids)).group_by("session_id").agg(pl.col("yad_no")).apply(lambda x: x[:-1])
     ).explode("yad_no")
+    print("seen_history_for_a_session_id: ", seen_history_for_a_session_id)
     return seen_history_for_a_session_id
 
 
@@ -67,3 +69,39 @@ def make_covisit_candidates(df: pl.DataFrame, covist_matrix: np.ndarray, k: int)
     for i in range(len(covist_matrix)):
         yad_covisit = np.argsort(covist_matrix[i])[::-1][:k]
         yad_covisit_dict[i].extend(yad_covisit.tolist())
+
+    # 共起するyad_noを候補として返す
+    # | yad_no | covisit_yad_no |
+    # | ------ | -------------- |
+    # | 1      | [2, 3, 4]      |
+    covisit_df = pl.DataFrame({
+        "yad_no": list(yad_covisit_dict.keys()),
+        "covisit_yad_no": list(yad_covisit_dict.values()),
+    })
+
+    df_ = df.clone().select(["session_id", "yad_no"])
+    df = (
+        df.join(covisit_df, on="yad_no", how="left")
+        .explode("covisit_yad_no")  # listを展開
+        .select(["session_id", "covisit_yad_no"])
+        .with_columns(pl.col("covisit_yad_no").alias("yad_no"))  # 列名を変更; covisit_yad_no -> yad_no
+        .select(["session_id", "yad_no"])
+    )
+    df = pl.concat([df_, df], how="vertical")
+    return df
+
+
+def _test_make_covisit_candidates():
+    from src import constants
+
+    train_log_df = pl.read_csv(constants.INPUT_DIR / "train_log.csv")
+    test_log_df = pl.read_csv(constants.INPUT_DIR / "test_log.csv")
+    log_df = pl.concat([train_log_df, test_log_df], how="vertical")
+    covisit_matrix = np.load(constants.OUTPUT_DIR / "covisit" / "covisit_matrix.npy")
+    covisit_matrix = make_covisit_candidates(log_df, covisit_matrix, k=10)
+    print(covisit_matrix.shape)
+    print(covisit_matrix)
+
+
+if __name__ == "__main__":
+    _test_make_covisit_candidates()

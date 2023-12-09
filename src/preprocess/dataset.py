@@ -31,19 +31,12 @@ def make_dataset(
 
     log_df = pl.concat([train_log_df, test_log_df], how="vertical").drop_nulls()
 
-    # make features_df
-    session_features_df = session_features.make_session_featuers(phase, log_df, session_ids)
-    yad_features_df = yad_features.make_yad_features(yad_df)
 
     def _make_candidates():
         """session_idごとじゃない候補生成の集約
 
-        TODO:
-            * make_covisit.pyで作った共起行列の情報を使って候補を出す
         """
         popular_candidates = candidates.make_popular_candidates(log_df, train_label_df)
-        # 共起行列を使って候補を生成する
-        # covisit_yad_dict = candidates.make_covisit_candidates(df, covisit_matrix, k=10)
         return popular_candidates
 
     candidates_ = _make_candidates()
@@ -63,9 +56,16 @@ def make_dataset(
 
     # 同じ候補は消す
     df = df.unique(subset=["session_id", "yad_no"]).select(["session_id", "yad_no"])
+    df = candidates.make_covisit_candidates(df, covisit_matrix, k=30)
 
+    # make features_df
+    session_features_df = session_features.make_session_featuers(phase, log_df, session_ids)
+    yad_features_df = yad_features.make_yad_features(yad_df)
     # attach features
     df = df.join(session_features_df, on="session_id", how="left").join(yad_features_df, on="yad_no", how="left")
+
+    # 同じ候補は消す
+    df = df.unique(subset=["session_id", "yad_no"])
 
     # TODO: 後でちゃんと処理を考える
     # nullの情報を落とす

@@ -30,11 +30,9 @@ def make_session_featuers(phase: str, log_df: pl.DataFrame, session_ids: list[st
     #     .agg(pl.first("yad_no").alias("last_seen_yad_no"))
     # )
 
-
     # attach session features
     session_df = (
-        pl.DataFrame({"session_id": session_ids})
-        .join(session_length_df, on="session_id", how="left")
+        pl.DataFrame({"session_id": session_ids}).join(session_length_df, on="session_id", how="left")
         # .join(last_seen_yad_no_df, on="session_id", how="left")
     )
     return session_df

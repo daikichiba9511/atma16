@@ -64,6 +64,6 @@ def train_one_fold(cfg: XGBTrainCFG, fold: int, train_df: pl.DataFrame, valid_df
         dtrain=dtrain,
         num_boost_round=num_boost_round,
         evals=[(dtrain, "train"), (dvalid, "valid")],
-        verbose_eval=num_boost_round // 100,
+        verbose_eval=100,
     )
     model.save_model(str(cfg.output_dir / f"xgb_model_fold{fold}.ubj"))

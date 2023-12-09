@@ -26,10 +26,12 @@ class Config:
 
     xgb_params: dict[str, str | int | float] = dataclasses.field(
         default_factory=lambda: {
-            "objective": "rank:pairwise",
+            # "objective": "rank:pairwise",
+            "objective": "binary:logistic",
+            "n_estimators": 10000,
             "tree_method": "hist",
             "random_state": 42,
-            "max_depth": 10,
+            "max_depth": 8,
             "learning_rate": 0.1,
             "verbosity": 1,
             "device": "cuda",  # gpuでの学習に必要

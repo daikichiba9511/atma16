@@ -9,7 +9,10 @@ from src.config.common import load_config
 from src.inference.predict import make_submission, predict
 from src.training import metrics
 from src.training.common import load_dataframes
+from src.utils import common as utils_common
+from src.utils.logger import get_root_logger
 
+logger = get_root_logger()
 
 def parse() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -40,8 +43,9 @@ def main():
     models = [model]
 
     covisit_matrix = np.load(constants.OUTPUT_DIR / "covisit" / "covisit_matrix.npy")
-    preds = predict(models, session_ids, dfs, covisit_matrix=covisit_matrix)
-    sub = make_submission(preds)
+    with utils_common.trace("predicting..."):
+        preds = predict(models, session_ids, dfs, covisit_matrix=covisit_matrix)
+        sub = make_submission(preds)
 
     label = pl.DataFrame({"session_id": session_ids}).join(
         dfs.train_label_df.filter(pl.col("session_id").is_in(session_ids)), how="left", on="session_id"
