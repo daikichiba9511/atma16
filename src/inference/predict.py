@@ -13,7 +13,7 @@ from src.training.common import DataFrames
 logger = getLogger(__name__)
 
 
-def predict(models, session_ids: list[str], dfs: DataFrames, covisit_matrix: np.ndarray, encoders: dict[str, LabelEncoder]) -> pl.DataFrame:
+def predict(models, session_ids: list[str], dfs: DataFrames, covisit_matrix: np.ndarray, encoders: dict[str, LabelEncoder], phase: str) -> pl.DataFrame:
     """
 
     Returns:
@@ -22,7 +22,7 @@ def predict(models, session_ids: list[str], dfs: DataFrames, covisit_matrix: np.
 
     # 候補生成と特徴量付け
     dataset = make_dataset(
-        phase="test",
+        phase=phase,
         session_ids=session_ids,
         train_label_df=dfs.train_label_df,
         yad_df=dfs.yad_df,

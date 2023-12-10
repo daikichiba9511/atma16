@@ -71,9 +71,9 @@ def make_seen_candidates(log_df: pl.DataFrame, session_ids: list[str]) -> pl.Dat
     # 最後に見たyad_noは候補から除外しておく
     seen_history_for_a_session_id = (
         log_df.filter(pl.col("session_id").is_in(session_ids))
-        .group_by("session_id", maintain_order=True)
+        .group_by("session_id")
         .agg(pl.col("yad_no"))
-        .apply(lambda x: (x[0], x[1][:-1]))
+        .apply(lambda x: (x[0], x[1][:-1]))  # [1,2,3] => [1, 2] 最後に見たyad_noは除外する
         .with_columns(pl.col("column_0").alias("session_id"), pl.col("column_1").alias("yad_no"))
         .select(["session_id", "yad_no"])
         .sort(by="session_id")

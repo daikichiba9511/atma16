@@ -55,7 +55,6 @@ def make_dataset(
     candidates_for_a_session_id = candidates.make_seen_candidates(log_df, session_ids)
     df = df.join(candidates_for_a_session_id, on="session_id", how="left")
 
-
     # 同じ候補は消す
     df = df.unique(subset=["session_id", "yad_no"]).select(["session_id", "yad_no"])
     df = candidates.make_covisit_candidates(df, covisit_matrix, k=10)
@@ -67,7 +66,7 @@ def make_dataset(
         df = pl.concat([df, label_df], how="vertical").drop_nulls()
 
     # make features_df
-    session_features_df = session_features.make_session_featuers(phase, log_df, session_ids)
+    session_features_df = session_features.make_session_featuers(phase, log_df, session_ids, yad_df=yad_df)
     yad_features_df = yad_features.make_yad_features(yad_df)
     # attach features
     df = df.join(session_features_df, on="session_id", how="left").join(yad_features_df, on="yad_no", how="left")

@@ -53,7 +53,7 @@ def main():
     }
     covisit_matrix = np.load(constants.OUTPUT_DIR / "covisit" / "covisit_matrix.npy")
     with utils_common.trace("predicting..."):
-        preds = predict(models, session_ids, dfs, covisit_matrix=covisit_matrix, encoders=encoders)
+        preds = predict(models, session_ids, dfs, covisit_matrix=covisit_matrix, encoders=encoders, phase="train")
         sub = make_submission(preds)
 
     label = pl.DataFrame({"session_id": session_ids}).join(
