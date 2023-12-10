@@ -14,8 +14,6 @@ def make_session_featuers(phase: str, log_df: pl.DataFrame, session_ids: list[st
     Returns:
         session_features_df: session features dataframe
     """
-    print("LOG_DF: ", log_df)
-
     filtered_log_df = log_df.filter(pl.col("session_id").is_in(session_ids))
 
     # 各sessionのlogの長さ

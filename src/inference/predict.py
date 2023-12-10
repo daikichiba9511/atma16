@@ -1,8 +1,10 @@
 from logging import getLogger
 
+import joblib
 import numpy as np
 import polars as pl
 import xgboost as xgb
+from sklearn.preprocessing import LabelEncoder
 
 from src import constants
 from src.preprocess.dataset import make_dataset
@@ -11,7 +13,7 @@ from src.training.common import DataFrames
 logger = getLogger(__name__)
 
 
-def predict(models, session_ids: list[str], dfs: DataFrames, covisit_matrix: np.ndarray) -> pl.DataFrame:
+def predict(models, session_ids: list[str], dfs: DataFrames, covisit_matrix: np.ndarray, encoders: dict[str, LabelEncoder]) -> pl.DataFrame:
     """
 
     Returns:
@@ -27,9 +29,10 @@ def predict(models, session_ids: list[str], dfs: DataFrames, covisit_matrix: np.
         train_log_df=dfs.train_log_df,
         test_log_df=dfs.test_log_df,
         covisit_matrix=covisit_matrix,
+        encoders=encoders,
     )
 
-    logger.info(f"dataset shape: {dataset.head(10)}")
+    logger.info(f"dataset head: {dataset.head(10)}")
 
     dataset.write_csv(constants.OUTPUT_DIR / "dataset.csv")
     # print(dataset)
@@ -102,7 +105,13 @@ def _test_predict():
     models = [model]
     session_ids = dfs.train_label_df["session_id"].unique().to_list()[:10]
     covisit_matrix = np.load(constants.OUTPUT_DIR / "covisit" / "covisit_matrix.npy")
-    preds = predict(models, session_ids, dfs, covisit_matrix=covisit_matrix)
+    encoders = {
+        "wid_cd": joblib.load(constants.OUTPUT_DIR / "exp000" / "wid_cd_encoder.pkl"),
+        "ken_cd": joblib.load(constants.OUTPUT_DIR / "exp000" / "ken_cd_encoder.pkl"),
+        "lrg_cd": joblib.load(constants.OUTPUT_DIR / "exp000" / "lrg_cd_encoder.pkl"),
+        "sml_cd": joblib.load(constants.OUTPUT_DIR / "exp000" / "sml_cd_encoder.pkl"),
+    }
+    preds = predict(models, session_ids, dfs, covisit_matrix=covisit_matrix, encoders=encoders)
     sub = make_submission(preds)
 
     label = pl.DataFrame({"session_id": session_ids}).join(

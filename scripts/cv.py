@@ -1,8 +1,10 @@
 import argparse
 
+import joblib
 import numpy as np
 import polars as pl
 import xgboost as xgb
+from sklearn.preprocessing import LabelEncoder
 
 from src import constants
 from src.config.common import load_config
@@ -43,9 +45,15 @@ def main():
         model.load_model(str(wpath))
     models = [model]
 
+    encoders = {
+        "wid_cd": joblib.load(constants.OUTPUT_DIR / cfg.name / "wid_cd_encoder.pkl"),
+        "ken_cd": joblib.load(constants.OUTPUT_DIR / cfg.name / "ken_cd_encoder.pkl"),
+        "lrg_cd": joblib.load(constants.OUTPUT_DIR / cfg.name / "lrg_cd_encoder.pkl"),
+        "sml_cd": joblib.load(constants.OUTPUT_DIR / cfg.name / "sml_cd_encoder.pkl"),
+    }
     covisit_matrix = np.load(constants.OUTPUT_DIR / "covisit" / "covisit_matrix.npy")
     with utils_common.trace("predicting..."):
-        preds = predict(models, session_ids, dfs, covisit_matrix=covisit_matrix)
+        preds = predict(models, session_ids, dfs, covisit_matrix=covisit_matrix, encoders=encoders)
         sub = make_submission(preds)
 
     label = pl.DataFrame({"session_id": session_ids}).join(

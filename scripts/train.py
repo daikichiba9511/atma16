@@ -2,8 +2,10 @@ import argparse
 import pprint
 from logging import INFO
 
+import joblib
 import numpy as np
 import polars as pl
+from sklearn.preprocessing import LabelEncoder
 
 from src import constants
 from src.config.common import load_config
@@ -35,6 +37,13 @@ def main() -> None:
     logger.info(f"Training start {cfg.name}")
     logger.info(f"config: {pprint.pformat(cfg)}")
 
+    encoders = {
+        "wid_cd": LabelEncoder(),
+        "ken_cd": LabelEncoder(),
+        "lrg_cd": LabelEncoder(),
+        "sml_cd": LabelEncoder(),
+    }
+
     def _make_folded_df():
         # リソースの開放のために関数にしている
         dfs = load_dataframes()
@@ -49,6 +58,7 @@ def main() -> None:
             train_label_df=dfs.train_label_df,
             session_ids=dfs.train_label_df["session_id"].unique().to_list(),
             covisit_matrix=covisit_matrix,
+            encoders=encoders,
         )
         df = dataset.make_target(df, dfs.train_label_df)
         folded_df = pl.DataFrame._from_pandas(make_fold(df, n_splits=cfg.n_splits))
@@ -72,6 +82,12 @@ def main() -> None:
             valid_df=df.filter(pl.col("fold") == fold),
         )
         break
+
+    for col_name, encoder in encoders.items():
+        joblib.dump(encoder, cfg.output_dir / f"{col_name}_encoder.pkl")
+
+    logger.info(f"Training end {cfg.name}")
+
 
 
 if __name__ == "__main__":

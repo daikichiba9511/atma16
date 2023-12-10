@@ -2,35 +2,35 @@ import numpy as np
 import polars as pl
 
 
-def make_top20_selected_yad_no(train_label_df: pl.DataFrame) -> np.ndarray:
-    """make top20 selected yad_no for a session_id
+def make_topk_selected_yad_no(train_label_df: pl.DataFrame, k: int) -> np.ndarray:
+    """make topk selected yad_no for a session_id
 
-    実際に選ばれたyad_noの上位20個を返す. これらは選ばれたということなので, これらを候補として返す.
+    実際に選ばれたyad_noの上位k個を返す. これらは選ばれたということなので, これらを候補として返す.
 
     Args:
         train_lebel_df:
     """
     top20_selected_yad_no = (
-        train_label_df["yad_no"].value_counts().sort(by="counts", descending=True).head(20).select("yad_no").to_numpy()
+        train_label_df["yad_no"].value_counts().sort(by="counts", descending=True).head(k).select("yad_no").to_numpy()
     )
     return top20_selected_yad_no
 
 
-def make_top20_seen_yad_no(log_df: pl.DataFrame) -> np.ndarray:
-    """make top20 seen yad_no for a session_id
+def make_topk_seen_yad_no(log_df: pl.DataFrame, k: int) -> np.ndarray:
+    """make topk seen yad_no for a session_id
 
-    よく見られたyad_noの上位20個を返す. よく見られるということは選ばれる可能性が高いということなので, これらを候補として返す.
+    よく見られたyad_noの上位k個を返す. よく見られるということは選ばれる可能性が高いということなので, これらを候補として返す.
 
     Args:
         log_df: conatenated train_log_df and test_log_df
     """
     top20_seen_yad_no = (
-        log_df["yad_no"].value_counts().sort(by="counts", descending=True).head(20).select("yad_no").to_numpy()
+        log_df["yad_no"].value_counts().sort(by="counts", descending=True).head(k).select("yad_no").to_numpy()
     )
     return top20_seen_yad_no
 
 
-def make_popular_candidates(log_df: pl.DataFrame, train_label_df: pl.DataFrame) -> np.ndarray:
+def make_popular_candidates(log_df: pl.DataFrame, train_label_df: pl.DataFrame, k: int) -> np.ndarray:
     """make popular candidates of yad_no for a session_id
 
     Args:
@@ -40,10 +40,26 @@ def make_popular_candidates(log_df: pl.DataFrame, train_label_df: pl.DataFrame) 
     Returns:
         candidates: popular candidates of yad_no for a session_id
     """
-    top20_selected_yad_no = make_top20_selected_yad_no(train_label_df)
-    top20_seen_yad_no = make_top20_seen_yad_no(log_df)
-    candidates = np.concatenate([top20_selected_yad_no, top20_seen_yad_no], dtype=np.int64)
+    topk_selected_yad_no = make_topk_selected_yad_no(train_label_df, k=k)
+    topk_seen_yad_no = make_topk_seen_yad_no(log_df, k=k)
+    candidates = np.concatenate([topk_selected_yad_no, topk_seen_yad_no], dtype=np.int64)
     return candidates.reshape(-1)
+
+
+def make_popular_candidates_at_seq_0(log_df: pl.DataFrame, k: int) -> np.ndarray:
+    """make popular candidates of yad_no for a session_id
+
+    Args:
+        log_df: dataframe of concatenated train_log.csv and test_log.csv
+        train_lebel_df:
+
+    Returns:
+        candidates: popular candidates of yad_no for a session_id
+    """
+    df_seq_0 = log_df.filter(pl.col("seq_no") == 0)["yad_no"].value_counts().sort(by="counts", descending=True)
+    popular_candidates_seq_0 = df_seq_0.head(k).select("yad_no").to_numpy().reshape(-1)
+    return popular_candidates_seq_0
+
 
 
 def make_seen_candidates(log_df: pl.DataFrame, session_ids: list[str]) -> pl.DataFrame:
@@ -54,12 +70,15 @@ def make_seen_candidates(log_df: pl.DataFrame, session_ids: list[str]) -> pl.Dat
     """
     # 最後に見たyad_noは候補から除外しておく
     seen_history_for_a_session_id = (
-        log_df.filter(pl.col("session_id").is_in(session_ids)).group_by("session_id").agg(pl.col("yad_no")).apply(lambda x: (x[0], x[1][:-1]))
+        log_df.filter(pl.col("session_id").is_in(session_ids))
+        .group_by("session_id", maintain_order=True)
+        .agg(pl.col("yad_no"))
+        .apply(lambda x: (x[0], x[1][:-1]))
         .with_columns(pl.col("column_0").alias("session_id"), pl.col("column_1").alias("yad_no"))
         .select(["session_id", "yad_no"])
+        .sort(by="session_id")
     )
     seen_history_for_a_session_id = seen_history_for_a_session_id.explode("yad_no").drop_nulls()
-    # print("seen_history_for_a_session_id: ", seen_history_for_a_session_id)
     return seen_history_for_a_session_id
 
 
