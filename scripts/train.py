@@ -75,19 +75,20 @@ def main() -> None:
         df = pl.read_parquet(folded_df_cache_path)
 
     for fold in range(cfg.n_splits):
-        xgb.train_one_fold(
-            cfg=cfg,
-            fold=fold,
-            train_df=df.filter(pl.col("fold") != fold),
-            valid_df=df.filter(pl.col("fold") == fold),
-        )
+        with utils_common.trace(f"training fold: {fold}..."):
+            xgb.train_one_fold(
+                cfg=cfg,
+                fold=fold,
+                train_df=df.filter(pl.col("fold") != fold),
+                valid_df=df.filter(pl.col("fold") == fold),
+                negative_sampling_rate=0.5
+            )
         break
 
     for col_name, encoder in encoders.items():
         joblib.dump(encoder, cfg.output_dir / f"{col_name}_encoder.pkl")
 
     logger.info(f"Training end {cfg.name}")
-
 
 
 if __name__ == "__main__":

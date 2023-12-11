@@ -28,7 +28,6 @@ class Config:
         default_factory=lambda: {
             # "objective": "rank:pairwise",
             "objective": "binary:logistic",
-            "n_estimators": 10000,
             "tree_method": "hist",
             "random_state": 42,
             "max_depth": 8,

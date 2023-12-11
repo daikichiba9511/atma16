@@ -15,7 +15,6 @@ def make_covisit_matrix(log_df: pl.DataFrame) -> np.ndarray:
     """
     max_yad_no = log_df["yad_no"].max()
     assert max_yad_no is not None
-    print("MAX_YAD_NO: ", max_yad_no)
     covisit_matrix = np.zeros((max_yad_no + 1, max_yad_no + 1), dtype=np.int64)  # type: ignore
     # O(n^2), n=13562≒1.0e4
     for yado_no in tqdm(

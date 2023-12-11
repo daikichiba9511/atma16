@@ -26,6 +26,9 @@ def make_fold(df: pl.DataFrame, n_splits: int = 5) -> pd.DataFrame:
 
 
 def _test_make_fold():
+    import numpy as np
+    from sklearn.preprocessing import LabelEncoder
+
     from src.preprocess import dataset
     from src.training import common
 
@@ -34,6 +37,13 @@ def _test_make_fold():
     # 選ぶsession_idのユニーク数
     sample_size = 5000
     dfs = common.load_dataframes().sample(n=sample_size)
+    encoders = {
+        "wid_cd": LabelEncoder(),
+        "ken_cd": LabelEncoder(),
+        "lrg_cd": LabelEncoder(),
+        "sml_cd": LabelEncoder(),
+    }
+    covisit_matrix = np.load(common.constants.OUTPUT_DIR / "covisit" / "covisit_matrix.npy")
     df = dataset.make_dataset(
         phase="train",
         yad_df=dfs.yad_df,
@@ -41,6 +51,8 @@ def _test_make_fold():
         test_log_df=dfs.test_log_df,
         train_label_df=dfs.train_label_df,
         session_ids=dfs.train_label_df["session_id"].unique().to_list(),
+        encoders=encoders,
+        covisit_matrix=covisit_matrix,
     )
     folded_df = make_fold(df, n_splits=5)
 

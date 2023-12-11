@@ -13,8 +13,23 @@ from src.training.common import DataFrames
 logger = getLogger(__name__)
 
 
-def predict(models, session_ids: list[str], dfs: DataFrames, covisit_matrix: np.ndarray, encoders: dict[str, LabelEncoder], phase: str) -> pl.DataFrame:
-    """
+def predict(
+    models,
+    session_ids: list[str],
+    dfs: DataFrames,
+    covisit_matrix: np.ndarray,
+    encoders: dict[str, LabelEncoder],
+    phase: str,
+) -> pl.DataFrame:
+    """予測を行う
+
+    Args:
+        models: list of xgb.Booster
+        session_ids: session_ids for train or test
+        dfs: DataFrames
+        covisit_matrix: co-visitation matrix
+        encoders: dict of LabelEncoder
+        phase: train or test
 
     Returns:
         pl.DataFrame: top10の予測結果
@@ -32,19 +47,16 @@ def predict(models, session_ids: list[str], dfs: DataFrames, covisit_matrix: np.
         encoders=encoders,
     )
 
-    logger.info(f"dataset head: {dataset.head(10)}")
-
-    dataset.write_csv(constants.OUTPUT_DIR / "dataset.csv")
-    # print(dataset)
-    # print(dataset.filter(pl.col("session_id") == "69cd6d9f3a24fcfe746b5a08bbf24a95"))
-    # print(dataset.filter(pl.col("session_id") == "69cd6d9f3a24fcfe746b5a08bbf24a95")["yad_no"].unique())
-    # print(3789 in dataset.filter(pl.col("session_id") == "69cd6d9f3a24fcfe746b5a08bbf24a95")["yad_no"].unique())
+    logger.info(f"dataset: {dataset}")
+    if phase == "train":
+        dataset.write_csv(constants.OUTPUT_DIR / "dataset.csv")
 
     # 予測
     y_preds = np.zeros((len(dataset), 1))
     for model in models:
         if isinstance(model, xgb.Booster):
-            data = xgb.DMatrix(dataset.drop(["session_id", "yad_no"]))
+            _dataset = dataset.drop(constants.NOT_USED_COLUMNS)
+            data = xgb.DMatrix(_dataset, feature_names=_dataset.columns)
             y_pred = model.predict(data).reshape(-1, 1)
             y_preds += y_pred
         else:

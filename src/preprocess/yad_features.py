@@ -104,6 +104,24 @@ def make_yad_features(yad_df: pl.DataFrame) -> pl.DataFrame:
         (pl.col("total_room_cnt") - pl.col("mean_total_room_cnt_with_onsen_flg")).alias(
             "diff_total_room_cnt_with_onsen_flg"
         ),
+        # (pl.col("total_room_cnt") - pl.col("mean_total_room_cnt_with_onsen_flg")).alias(
+        #     "diff_raw_mean_total_room_cnt_with_onsen_flg"
+        # ),
+        # (pl.col("total_room_cnt") - pl.col("median_total_room_cnt_with_onsen_flg")).alias(
+        #     "diff_raw_median_total_room_cnt_with_onsen_flg"
+        # ),
+        # (pl.col("total_room_cnt") - pl.col("mean_total_room_cnt_with_yad_type")).alias(
+        #     "diff_raw_mean_total_room_cnt_with_yad_type"
+        # ),
+        # (pl.col("total_room_cnt") - pl.col("median_total_room_cnt_with_yad_type")).alias(
+        #     "diff_raw_median_total_room_cnt_with_yad_type"
+        # ),
+        # (pl.col("total_room_cnt") - pl.col("mean_total_room_cnt_with_kd_stn_5min")).alias(
+        #     "diff_raw_mean_total_room_cnt_with_kd_stn_5min"
+        # ),
+        # (pl.col("total_room_cnt") - pl.col("median_total_room_cnt_with_kd_stn_5min")).alias(
+        #     "diff_raw_median_total_room_cnt_with_kd_stn_5min"
+        # ),
     )
     return _yad_df
 
