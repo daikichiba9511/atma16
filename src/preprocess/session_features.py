@@ -138,9 +138,11 @@ def _test_make_session_features():
     session_ids = train_log_df["session_id"].unique().to_list()
     with trace("making session features..."):
         session_features_df = make_session_featuers("train", log_df, session_ids, yad_df)
-        print("Session Features DataFrame: ", session_features_df)
-        print("Used columns: ", session_features_df.columns)
-        print("Unique Session ids: ", session_features_df["session_id"].unique())
+
+    print("Session Features DataFrame: ", session_features_df)
+    print("Used columns: ", session_features_df.columns)
+    print("Unique Session ids: ", session_features_df["session_id"].unique())
+    print(session_features_df.filter(pl.col("first_seen_yad_no") != pl.col("last_seen_yad_no")))
 
 
 if __name__ == "__main__":

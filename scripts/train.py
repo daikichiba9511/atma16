@@ -81,7 +81,7 @@ def main() -> None:
                 fold=fold,
                 train_df=df.filter(pl.col("fold") != fold),
                 valid_df=df.filter(pl.col("fold") == fold),
-                negative_sampling_rate=0.5
+                negative_sampling_rate=getattr(cfg, "negative_sampling_rate", 0.5),
             )
         break
 

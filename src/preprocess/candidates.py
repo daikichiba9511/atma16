@@ -77,7 +77,9 @@ def make_seen_candidates(log_df: pl.DataFrame, session_ids: list[str]) -> pl.Dat
         .select(["session_id", "yad_no"])
         .sort(by="session_id")
     )
-    seen_history_for_a_session_id = seen_history_for_a_session_id.explode("yad_no").drop_nulls()
+    seen_history_for_a_session_id = (
+        seen_history_for_a_session_id.explode("yad_no").drop_nulls().unique(subset=["session_id", "yad_no"])
+    )
     return seen_history_for_a_session_id
 
 
@@ -213,6 +215,7 @@ def make_popular_candidates_in_interested_area(
 
     ranking_in_sml_cd = _make_ranking_in_area(df_with_yad_info, area_col_name="sml_cd")
     ranking_in_lrg_cd = _make_ranking_in_area(df_with_yad_info, area_col_name="lrg_cd")
+    ranking_in_ken_cd = _make_ranking_in_area(df_with_yad_info, area_col_name="ken_cd")
 
     candidates_in_the_interested_sml_cd = _ranking_to_candidates(
         ranking_in_sml_cd, k, df_with_yad_info, session_ids, area_col_name="sml_cd"
@@ -220,9 +223,17 @@ def make_popular_candidates_in_interested_area(
     candidates_in_the_interested_lrg_cd = _ranking_to_candidates(
         ranking_in_lrg_cd, k, df_with_yad_info, session_ids, area_col_name="lrg_cd"
     )
+    candidates_in_the_interested_ken_cd = _ranking_to_candidates(
+        ranking_in_ken_cd, k, df_with_yad_info, session_ids, area_col_name="ken_cd"
+    )
 
     candidates_interested_areas = pl.concat(
-        [candidates_in_the_interested_sml_cd, candidates_in_the_interested_lrg_cd], how="vertical"
+        [
+            candidates_in_the_interested_sml_cd,
+            candidates_in_the_interested_lrg_cd,
+            candidates_in_the_interested_ken_cd,
+        ],
+        how="vertical",
     ).unique(subset=["session_id", "yad_no"])
     return candidates_interested_areas
 

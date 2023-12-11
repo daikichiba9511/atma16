@@ -67,11 +67,11 @@ def train_one_fold(cfg: XGBTrainCFG, fold: int, train_df: pl.DataFrame, valid_df
             dtrain=dtrain,
             num_boost_round=num_boost_round,
             evals=[(dtrain, "train"), (dvalid, "valid")],
-            early_stopping_rounds=100,
+            early_stopping_rounds=200,
             verbose_eval=100,
         )
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(30, 10))
     xgb.plot_importance(model, ax=ax)
     fig.savefig(str(cfg.output_dir / f"importance_fold{fold}.png"))
 

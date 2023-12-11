@@ -123,7 +123,7 @@ def _test_predict():
         "lrg_cd": joblib.load(constants.OUTPUT_DIR / "exp000" / "lrg_cd_encoder.pkl"),
         "sml_cd": joblib.load(constants.OUTPUT_DIR / "exp000" / "sml_cd_encoder.pkl"),
     }
-    preds = predict(models, session_ids, dfs, covisit_matrix=covisit_matrix, encoders=encoders)
+    preds = predict(models, session_ids, dfs, covisit_matrix=covisit_matrix, encoders=encoders, phase="train")
     sub = make_submission(preds)
 
     label = pl.DataFrame({"session_id": session_ids}).join(

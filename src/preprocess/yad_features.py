@@ -1,24 +1,39 @@
+import numpy as np
 import polars as pl
 
 
 def make_yad_features(yad_df: pl.DataFrame) -> pl.DataFrame:
-    """make features about yad_no
+    r"""make features about yad_no
 
     Args:
         yad_df: yado.csv
+
                 * yad_no: 宿のID
+
                 * yad_type: 宿のタイプ
+
                 * total_room_cnt: 部屋数
+
                 * wireless_lan_flg: 無線LANがあるかないか。ほぼ1
+
                 * onsen_flg: 温泉があるかないか
+
                 * kd_stn_5min: 駅までの徒歩5分圏内かどうか
+
                 * kd_bch_5min: ビーチまでの徒歩5分圏内かどうか
+
                 * kd_slp_5min: スキー場までの徒歩5分圏内かどうか
+
                 * kd_conv_walk_5min: コンビニまでの徒歩5分圏内かどうか
+
                 * wid_cd: 広域エリアコード. 複数の県にまたがる場合がある
+
                 * ken_cd: 県コード
+
                 * lrg_cd: 大エリアコード.
+
                 * karaoke_flg: カラオケがあるかないか
+
                 * sml_cd: 小エリアコード
     """
     _yad_df = yad_df.clone()
@@ -101,32 +116,46 @@ def make_yad_features(yad_df: pl.DataFrame) -> pl.DataFrame:
 
     # make features with stats features
     _yad_df = _yad_df.with_columns(
-        (pl.col("total_room_cnt") - pl.col("mean_total_room_cnt_with_onsen_flg")).alias(
-            "diff_total_room_cnt_with_onsen_flg"
-        ),
         # (pl.col("total_room_cnt") - pl.col("mean_total_room_cnt_with_onsen_flg")).alias(
-        #     "diff_raw_mean_total_room_cnt_with_onsen_flg"
+        #     "diff_total_room_cnt_with_onsen_flg"
         # ),
-        # (pl.col("total_room_cnt") - pl.col("median_total_room_cnt_with_onsen_flg")).alias(
-        #     "diff_raw_median_total_room_cnt_with_onsen_flg"
-        # ),
-        # (pl.col("total_room_cnt") - pl.col("mean_total_room_cnt_with_yad_type")).alias(
-        #     "diff_raw_mean_total_room_cnt_with_yad_type"
-        # ),
-        # (pl.col("total_room_cnt") - pl.col("median_total_room_cnt_with_yad_type")).alias(
-        #     "diff_raw_median_total_room_cnt_with_yad_type"
-        # ),
-        # (pl.col("total_room_cnt") - pl.col("mean_total_room_cnt_with_kd_stn_5min")).alias(
-        #     "diff_raw_mean_total_room_cnt_with_kd_stn_5min"
-        # ),
-        # (pl.col("total_room_cnt") - pl.col("median_total_room_cnt_with_kd_stn_5min")).alias(
-        #     "diff_raw_median_total_room_cnt_with_kd_stn_5min"
-        # ),
+        (pl.col("total_room_cnt") - pl.col("mean_total_room_cnt_with_onsen_flg")).alias(
+            "diff_raw_mean_total_room_cnt_with_onsen_flg"
+        ),
+        (pl.col("total_room_cnt") - pl.col("median_total_room_cnt_with_onsen_flg")).alias(
+            "diff_raw_median_total_room_cnt_with_onsen_flg"
+        ),
+        (pl.col("total_room_cnt") - pl.col("mean_total_room_cnt_with_yad_type")).alias(
+            "diff_raw_mean_total_room_cnt_with_yad_type"
+        ),
+        (pl.col("total_room_cnt") - pl.col("median_total_room_cnt_with_yad_type")).alias(
+            "diff_raw_median_total_room_cnt_with_yad_type"
+        ),
+        (pl.col("total_room_cnt") - pl.col("mean_total_room_cnt_with_kd_stn_5min")).alias(
+            "diff_raw_mean_total_room_cnt_with_kd_stn_5min"
+        ),
+        (pl.col("total_room_cnt") - pl.col("median_total_room_cnt_with_kd_stn_5min")).alias(
+            "diff_raw_median_total_room_cnt_with_kd_stn_5min"
+        ),
+        (pl.col("total_room_cnt") - pl.col("mean_total_room_cnt_with_kd_bch_5min")).alias(
+            "diff_raw_mean_total_room_cnt_with_kd_bch_5min"
+        ),
+        (pl.col("total_room_cnt") - pl.col("median_total_room_cnt_with_kd_bch_5min")).alias(
+            "diff_raw_median_total_room_cnt_with_kd_bch_5min"
+        ),
+        (pl.col("total_room_cnt") - pl.col("mean_total_room_cnt_with_kd_conv_walk_5min")).alias(
+            "diff_raw_mean_total_room_cnt_with_kd_conv_walk_5min"
+        ),
+        (pl.col("total_room_cnt") - pl.col("median_total_room_cnt_with_kd_conv_walk_5min")).alias(
+            "diff_raw_median_total_room_cnt_with_kd_conv_walk_5min"
+        ),
     )
     return _yad_df
 
 
 def _test_make_yad_features():
+    import pprint
+
     from src import constants
     from src.utils.common import trace
 
@@ -134,6 +163,8 @@ def _test_make_yad_features():
     with trace("making yad features..."):
         yad_features_df = make_yad_features(yad_df)
         print(yad_features_df)
+
+    pprint.pprint(yad_features_df.columns)
 
 
 if __name__ == "__main__":

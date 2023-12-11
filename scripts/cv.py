@@ -58,8 +58,8 @@ def main():
             dfs,
             covisit_matrix=covisit_matrix,
             encoders=encoders,
-            phase="train",
-            # phase="test",
+            # phase="train",
+            phase="test",
         )
         sub = make_submission(preds)
 
