@@ -5,6 +5,7 @@ from logging import INFO
 import joblib
 import numpy as np
 import polars as pl
+from gensim.models import word2vec
 from sklearn.preprocessing import LabelEncoder
 
 from src import constants
@@ -17,6 +18,8 @@ from src.utils import common as utils_common
 from src.utils.logger import attach_file_handler, get_root_logger
 
 logger = get_root_logger(INFO)
+
+pl.Config.set_tbl_column_data_type_inline(True)
 
 
 def parse() -> argparse.Namespace:
@@ -37,11 +40,12 @@ def main() -> None:
     logger.info(f"Training start {cfg.name}")
     logger.info(f"config: {pprint.pformat(cfg)}")
 
-    encoders = {
+    encoders: dataset.Encoders = {
         "wid_cd": LabelEncoder(),
         "ken_cd": LabelEncoder(),
         "lrg_cd": LabelEncoder(),
         "sml_cd": LabelEncoder(),
+        "word2vec": None,
     }
 
     def _make_folded_df():
@@ -86,7 +90,13 @@ def main() -> None:
         break
 
     for col_name, encoder in encoders.items():
-        joblib.dump(encoder, cfg.output_dir / f"{col_name}_encoder.pkl")
+        if col_name == "word2vec":
+            assert isinstance(encoder, word2vec.Word2Vec)
+            encoder.save(str(cfg.output_dir / "word2vec"))
+        else:
+            joblib.dump(encoder, cfg.output_dir / f"{col_name}_encoder.pkl")
+
+
 
     logger.info(f"Training end {cfg.name}")
 

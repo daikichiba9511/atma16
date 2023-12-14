@@ -1,14 +1,24 @@
 import collections
 import functools
 from logging import getLogger
+from typing import TypedDict
 
 import numpy as np
 import polars as pl
+from gensim.models import word2vec
 from sklearn.preprocessing import LabelEncoder
 
 from src.preprocess import candidates, session_features, yad_features
 
 logger = getLogger(__name__)
+
+
+class Encoders(TypedDict):
+    wid_cd: LabelEncoder
+    ken_cd: LabelEncoder
+    lrg_cd: LabelEncoder
+    sml_cd: LabelEncoder
+    word2vec: word2vec.Word2Vec | None
 
 
 def make_dataset(
@@ -19,7 +29,7 @@ def make_dataset(
     train_label_df: pl.DataFrame,
     session_ids: list[str],
     covisit_matrix: np.ndarray,
-    encoders: dict[str, LabelEncoder],
+    encoders: Encoders,
 ) -> pl.DataFrame:
     """make dataframe for session_ids
 
@@ -34,18 +44,18 @@ def make_dataset(
     """
 
     log_df = pl.concat([train_log_df, test_log_df], how="vertical").drop_nulls()
-    # TODO: 後でちゃんと処理を考える
-    # nullの情報を落とす
-    if phase == "test":
-        encoded_wid_cd = encoders["wid_cd"].transform(yad_df["wid_cd"].to_list())
-        encoded_ken_cd = encoders["ken_cd"].transform(yad_df["ken_cd"].to_list())
-        encoded_lrg_cd = encoders["lrg_cd"].transform(yad_df["lrg_cd"].to_list())
-        encoded_sml_cd = encoders["sml_cd"].transform(yad_df["sml_cd"].to_list())
-    else:
+
+    # nullの情報を落とす, strなのでnaiveにlabel encoding
+    if phase == "train":
         encoded_wid_cd = encoders["wid_cd"].fit_transform(yad_df["wid_cd"].to_list())
         encoded_ken_cd = encoders["ken_cd"].fit_transform(yad_df["ken_cd"].to_list())
         encoded_lrg_cd = encoders["lrg_cd"].fit_transform(yad_df["lrg_cd"].to_list())
         encoded_sml_cd = encoders["sml_cd"].fit_transform(yad_df["sml_cd"].to_list())
+    else:
+        encoded_wid_cd = encoders["wid_cd"].transform(yad_df["wid_cd"].to_list())
+        encoded_ken_cd = encoders["ken_cd"].transform(yad_df["ken_cd"].to_list())
+        encoded_lrg_cd = encoders["lrg_cd"].transform(yad_df["lrg_cd"].to_list())
+        encoded_sml_cd = encoders["sml_cd"].transform(yad_df["sml_cd"].to_list())
 
     yad_df = yad_df.with_columns(
         pl.Series("wid_cd", encoded_wid_cd, dtype=pl.UInt32),
@@ -77,15 +87,38 @@ def make_dataset(
         "session_id",
         pl.col("yad_no").cast(pl.Int32).alias("yad_no"),
     ])
-    df = pl.concat([df, candidates_for_a_session_id], how="vertical")
-    df = df.filter(pl.col("session_id").is_in(session_ids)).unique(subset=["session_id", "yad_no"])
+    df = (
+        pl.concat([df, candidates_for_a_session_id], how="vertical")
+        .filter(pl.col("session_id").is_in(session_ids))
+        .unique(subset=["session_id", "yad_no"])
+    )
+
+    log_latest_df = log_df.group_by("session_id").tail(1).rename({"yad_no": "latest_yad_no"})
+    df = df.join(log_latest_df, on="session_id", how="left")
+
+    log_latest_df = (
+        log_latest_df.join(train_label_df, on="session_id", how="left")
+        .group_by(["latest_yad_no", "yad_no"])
+        .count()
+        .sort(by=["latest_yad_no", "count"], descending=[False, True])
+    )
+    latest_candidates = (
+        log_latest_df.group_by("latest_yad_no").head(10).select(["latest_yad_no", "yad_no"]).drop_nulls()
+    )
+
+    latest_candidates = latest_candidates.join(df, on="latest_yad_no", how="inner").select(["session_id", "yad_no"])
+    df = pl.concat(
+        [
+            df.select(["session_id", "yad_no"]),
+            latest_candidates.select(["session_id", pl.col("yad_no").cast(pl.Int32)]),
+        ],
+        how="vertical",
+    )
 
     # 興味のあるエリアのyad_noを候補として追加する
     area_candidats_df = candidates.make_popular_candidates_in_interested_area(
         df=log_df, session_ids=session_ids, yad_df=yad_df, k=10
     ).select(["session_id", pl.col("yad_no").cast(pl.Int32).alias("yad_no")])
-
-    # 同じ候補は消す
     df = (
         pl.concat([df, area_candidats_df], how="vertical")
         .unique(subset=["session_id", "yad_no"])
@@ -94,19 +127,6 @@ def make_dataset(
             pl.col("yad_no").cast(pl.Int32).alias("yad_no"),
         ])
     )
-    # df = candidates.make_covisit_candidates(df, covisit_matrix, k=10)
-    # df = df.filter(pl.col("session_id").is_in(session_ids)).select([
-    #     "session_id",
-    #     pl.col("yad_no").cast(pl.Int32).alias("yad_no"),
-    # ])
-
-    # 実際に選ばれたのも候補に入れる
-    # バイアスが入る。実際に選ばれたものが入るので
-    # if phase == "train":
-    #     df = pl.concat(
-    #         [df, train_label_df.select(["session_id", pl.col("yad_no").cast(pl.Int32).alias("yad_no")])],
-    #         how="vertical",
-    #     ).drop_nulls()
 
     # dataframeのサイズを落とす
     # ナイーブにやると簡単に大きくなってOOMになる
@@ -118,31 +138,45 @@ def make_dataset(
     )
 
     # make features_df
-    session_features_df = session_features.make_session_featuers(phase, log_df, session_ids, yad_df=yad_df).select(
-        pl.all().shrink_dtype(),
-    )
-    yad_features_df = (
-        yad_features.make_yad_features(yad_df)
-        .select(pl.all().shrink_dtype())
-        .with_columns(pl.col("yad_no").cast(pl.Int64).alias("yad_no"))
-    )
+    def attach_session_feats(df, phase, log_df, session_ids):
+        session_features_df = session_features.make_session_featuers(phase, log_df, session_ids, yad_df=yad_df)
+        session_features_df = session_features_df.select(pl.all().shrink_dtype())
+        df = df.join(session_features_df, on="session_id", how="left")
+        return df
+
+    def attach_yad_feats(df, yad_df, log_df):
+        yad_features_df = (
+            yad_features.make_yad_features(log_df, yad_df)
+            .select(pl.all().shrink_dtype())
+            .with_columns(pl.col("yad_no").cast(pl.Int64).alias("yad_no"))
+        )
+        df = df.join(yad_features_df, on="yad_no", how="left")
+        return df
 
     # attach features
-    df = (
-        df.with_columns(pl.col("yad_no").cast(pl.Int64))
-        .join(session_features_df, on="session_id", how="left")
-        .join(yad_features_df, on="yad_no", how="left")
-    )
+    df = attach_session_feats(df, phase, log_df, session_ids)
+    df = df.filter(pl.col("session_id").is_in(session_ids))
+    df = attach_yad_feats(df, yad_df, log_df)
     df = df.filter(pl.col("session_id").is_in(session_ids))
 
-    label_with_yado_info = train_label_df.join(yad_df, on="yad_no", how="left")
-
     def _take_k_most_freq(x: list, k: int):
-        cnt = collections.Counter(x)
-        sorted_cnt = sorted(cnt.items(), key=lambda x: x[1], reverse=True)
-        return [x[0] for x in sorted_cnt[:k]]
+        """xの中で最も多いものを多い順にk個取る"""
+        return [x[0] for x in collections.Counter(x).most_common(k)]
 
     def _make_topk_yad_per_area_cd(df: pl.DataFrame, area_cd_col: str, k: int):
+        """areaごとにtopkのyad_noを返す
+
+        Args:
+            df: dataframe with yad_no and area_cd
+            area_cd_col: area_cd column name
+            k: topk
+
+        Returns:
+            | area_cd | topk_yad_no |
+            | ------- | ----------- |
+            | 1       | [1,2,3]     |
+            | 2       | [2,3,1]     |
+        """
         topk_yad_no_per_area_cd = (
             df.group_by(area_cd_col)
             .agg(pl.col("yad_no").alias(f"topk_{area_cd_col}_yad_no"))
@@ -160,33 +194,123 @@ def make_dataset(
         ).drop(["column_0", "column_1", f"top{k}_{area_cd_col}_yad_no"])
         return topk_yad_no_per_area_cd
 
-    top10_yad_no_sml_cd = _make_topk_yad_per_area_cd(label_with_yado_info, "sml_cd", 10)
-    top10_yad_no_lrg_cd = _make_topk_yad_per_area_cd(label_with_yado_info, "lrg_cd", 10)
-    top10_yad_no_ken_cd = _make_topk_yad_per_area_cd(label_with_yado_info, "ken_cd", 10)
-    top10_yad_no_wid_cd = _make_topk_yad_per_area_cd(label_with_yado_info, "wid_cd", 10)
+    def attach_topk_ranking_in_the_area_as_feats(df):
+        """特徴量として興味のあるエリアのtop10を追加する"""
+        label_with_yado_info = train_label_df.join(yad_df, on="yad_no", how="left")
+        top10_yad_no_sml_cd = _make_topk_yad_per_area_cd(label_with_yado_info, "sml_cd", 10)
+        top10_yad_no_lrg_cd = _make_topk_yad_per_area_cd(label_with_yado_info, "lrg_cd", 10)
+        top10_yad_no_ken_cd = _make_topk_yad_per_area_cd(label_with_yado_info, "ken_cd", 10)
+        top10_yad_no_wid_cd = _make_topk_yad_per_area_cd(label_with_yado_info, "wid_cd", 10)
 
-    # 特徴量として興味のあるエリアのtop10を追加する
+        # # 特徴量として興味のあるエリアのtop10を追加する
+        df = (
+            df.with_columns(
+                pl.col("sml_cd").cast(pl.UInt16),
+                pl.col("lrg_cd").cast(pl.UInt16),
+                pl.col("ken_cd").cast(pl.UInt16),
+                pl.col("wid_cd").cast(pl.UInt16),
+            )
+            .join(top10_yad_no_sml_cd, on="sml_cd", how="left")
+            .join(top10_yad_no_lrg_cd, on="lrg_cd", how="left")
+            .join(top10_yad_no_ken_cd, on="ken_cd", how="left")
+            .join(top10_yad_no_wid_cd, on="wid_cd", how="left")
+        )
+        return df
+
+    df = attach_topk_ranking_in_the_area_as_feats(df)
+
+    def _make_area_popular_ranking(label_with_yado_info: pl.DataFrame, area_cd: str):
+        """指定したarea_cdごとに人気の宿ランキングを返す
+
+        もしかしたら上と同じもの返してるかも
+        """
+        popular_yado_ranking = (
+            label_with_yado_info.group_by([area_cd, "yad_no"])
+            .count()
+            .sort(by=[area_cd, "count"], descending=[False, True])
+        )
+        popular_yado_area_feature = popular_yado_ranking.group_by(area_cd).map_groups(
+            lambda group: group.with_columns(
+                pl.col("count").rank(method="dense", descending=True).over(area_cd).alias(f"popular_{area_cd}_rank"),
+            )
+        )
+        return popular_yado_area_feature.drop("count")
+
+    def _attach_area_popular_ranking(df: pl.DataFrame):
+        """特徴量として興味のあるエリアの人気の宿ランキングを追加する"""
+        label_with_yado_info = train_label_df.join(yad_df, on="yad_no", how="left")
+        sml_cd_popular_ranking = _make_area_popular_ranking(label_with_yado_info, "sml_cd")
+        lrg_cd_popular_ranking = _make_area_popular_ranking(label_with_yado_info, "lrg_cd")
+        ken_cd_popular_ranking = _make_area_popular_ranking(label_with_yado_info, "ken_cd")
+        wid_cd_popular_ranking = _make_area_popular_ranking(label_with_yado_info, "wid_cd")
+
+        df = (
+            df.with_columns(
+                pl.col("sml_cd").cast(pl.UInt32),
+                pl.col("lrg_cd").cast(pl.UInt32),
+                pl.col("ken_cd").cast(pl.UInt32),
+                pl.col("wid_cd").cast(pl.UInt32),
+            )
+            .join(sml_cd_popular_ranking, on=["sml_cd", "yad_no"], how="left")
+            .join(lrg_cd_popular_ranking, on=["lrg_cd", "yad_no"], how="left")
+            .join(ken_cd_popular_ranking, on=["ken_cd", "yad_no"], how="left")
+            .join(wid_cd_popular_ranking, on=["wid_cd", "yad_no"], how="left")
+        )
+        return df
+
+    df = _attach_area_popular_ranking(df)
+
+    # area codeが候補と同じかどうか
+    df = df.with_columns(
+        # last
+        (pl.col("last_seen_sml_cd_0") == pl.col("sml_cd")).alias("last_is_same_sml_cd").cast(pl.Int32),
+        (pl.col("last_seen_sml_cd_0") == pl.col("lrg_cd")).alias("last_is_same_lrg_cd").cast(pl.Int32),
+        (pl.col("last_seen_sml_cd_0") == pl.col("ken_cd")).alias("last_is_same_ken_cd").cast(pl.Int32),
+        (pl.col("last_seen_sml_cd_0") == pl.col("wid_cd")).alias("last_is_same_wid_cd").cast(pl.Int32),
+        # first
+        (pl.col("first_seen_sml_cd_0") == pl.col("sml_cd")).alias("first_is_same_sml_cd").cast(pl.Int32),
+        (pl.col("first_seen_sml_cd_0") == pl.col("lrg_cd")).alias("first_is_same_lrg_cd").cast(pl.Int32),
+        (pl.col("first_seen_sml_cd_0") == pl.col("ken_cd")).alias("first_is_same_ken_cd").cast(pl.Int32),
+        (pl.col("first_seen_sml_cd_0") == pl.col("wid_cd")).alias("first_is_same_wid_cd").cast(pl.Int32),
+        # first is same as last
+        (pl.col("first_seen_sml_cd_0") == pl.col("last_seen_sml_cd_0"))
+        .alias("first_is_same_as_last_sml_cd")
+        .cast(pl.Int32),
+        (pl.col("first_seen_lrg_cd_0") == pl.col("last_seen_sml_cd_0"))
+        .alias("first_is_same_as_last_lrg_cd")
+        .cast(pl.Int32),
+        (pl.col("first_seen_ken_cd_0") == pl.col("last_seen_sml_cd_0"))
+        .alias("first_is_same_as_last_ken_cd")
+        .cast(pl.Int32),
+        (pl.col("first_seen_wid_cd_0") == pl.col("last_seen_sml_cd_0"))
+        .alias("first_is_same_as_last_wid_cd")
+        .cast(pl.Int32),
+    )
+
+    # logの埋め込みからユーザの傾向をベクトルに埋め込みたい
+    if phase == "train":
+        session_to_yad_no_list = log_df.group_by("session_id").agg(pl.col("yad_no"))
+        encoders["word2vec"] = word2vec.Word2Vec(
+            session_to_yad_no_list["yad_no"].to_list(), vector_size=32, window=5, min_count=1, workers=4
+        )
+
+    if encoders["word2vec"] is None:
+        raise ValueError("word2vec is None in encoders")
+
+    yad_to_vec = {yad_no: encoders["word2vec"].wv[yad_no] for yad_no in encoders["word2vec"].wv.index_to_key}
     df = (
         df.with_columns(
-            pl.col("sml_cd").cast(pl.UInt16),
-            pl.col("lrg_cd").cast(pl.UInt16),
-            pl.col("ken_cd").cast(pl.UInt16),
-            pl.col("wid_cd").cast(pl.UInt16),
+            pl.col("yad_no").cast(pl.Int32).replace(yad_to_vec, default=None).alias("session_yad_no_log_vec"),
         )
-        .join(top10_yad_no_sml_cd, on="sml_cd", how="left")
-        .join(top10_yad_no_lrg_cd, on="lrg_cd", how="left")
-        .join(top10_yad_no_ken_cd, on="ken_cd", how="left")
-        .join(top10_yad_no_wid_cd, on="wid_cd", how="left")
+        .with_columns(*[pl.col("session_yad_no_log_vec").list.get(i).alias(f"yad_no_vec_{i}") for i in range(32)])
+        .drop("session_yad_no_log_vec")
     )
 
     # 同じ候補は消す
     df = df.unique(subset=["session_id", "yad_no"])
     df = df.filter(pl.col("session_id").is_in(session_ids))
 
-    df = df.select(pl.all().shrink_dtype())
-
-    df = df.fill_null(0)
-
+    df = df.select(pl.all().shrink_dtype()).fill_null(0)
     return df
 
 
@@ -242,11 +366,12 @@ def _test_make_dataframe():
     # dfs = load_dataframes().sample(n=5000)
     # dfs = load_dataframes()
     covisit_matrix = np.load(constants.OUTPUT_DIR / "covisit" / "covisit_matrix.npy")
-    encoders = {
+    encoders: Encoders = {
         "wid_cd": LabelEncoder(),
         "ken_cd": LabelEncoder(),
         "lrg_cd": LabelEncoder(),
         "sml_cd": LabelEncoder(),
+        "word2vec": None,
     }
     with trace("making dataframe..."):
         train_df = make_dataset(
@@ -267,6 +392,7 @@ def _test_make_dataframe():
         cols = train_df.columns
         list_cols = [col for col in cols if train_df[col].dtype == pl.List]
         print("columns", cols)
+        print("num cols: ", len(cols))
         print("list cols", list_cols)
         print("list cols value_counts", train_df[list_cols])
 

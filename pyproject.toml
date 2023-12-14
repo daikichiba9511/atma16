@@ -2,9 +2,7 @@
 name = "atma16"
 version = "0.1.0"
 description = "a solution of atmaCup16"
-authors = [
-    { name = "daikichiba9511", email = "daikichiba.tech.ml@gmail.com" }
-]
+authors = [{ name = "daikichiba9511", email = "daikichiba.tech.ml@gmail.com" }]
 dependencies = [
     "numpy>=1.26.2",
     "pandas>=2.1.3",
@@ -16,6 +14,7 @@ dependencies = [
     "xgboost>=2.0.2",
     "scikit-learn>=1.3.2",
     "pyarrow>=14.0.1",
+    "gensim>=4.3.2",
 ]
 readme = "README.md"
 requires-python = ">= 3.10"
@@ -26,7 +25,7 @@ url = "https://download.pytorch.org/whl/cu118"
 type = "index"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling<=1.18.0"]
 build-backend = "hatchling.build"
 
 [tool.rye]
@@ -52,9 +51,9 @@ select = ["E", "F", "B", "W", "I"]
 target-version = "py310"
 line-length = 119
 ignore = [
-    "E203",  # white space before ':', not compatible with black
-    "E501",  # line-length violation
-    "B905",  # zip iterator without strict parameter
+    "E203", # white space before ':', not compatible with black
+    "E501", # line-length violation
+    "B905", # zip iterator without strict parameter
 ]
 unfixable = ["B"]
 exclude = [

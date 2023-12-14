@@ -2,7 +2,7 @@ import numpy as np
 import polars as pl
 
 
-def make_yad_features(yad_df: pl.DataFrame) -> pl.DataFrame:
+def make_yad_features(log_df: pl.DataFrame, yad_df: pl.DataFrame) -> pl.DataFrame:
     r"""make features about yad_no
 
     Args:
@@ -150,18 +150,29 @@ def make_yad_features(yad_df: pl.DataFrame) -> pl.DataFrame:
             "diff_raw_median_total_room_cnt_with_kd_conv_walk_5min"
         ),
     )
+
+    # ログ内での登場回数
+    yad_no_to_appearance_cnt = (
+        log_df.group_by("yad_no")
+        .agg(pl.count("yad_no").alias("appearance_cnt"))
+        .with_columns(
+            pl.col("appearance_cnt"),
+        )
+    )
+    _yad_df = _yad_df.join(yad_no_to_appearance_cnt, on="yad_no", how="left")
+
     return _yad_df
 
 
 def _test_make_yad_features():
     import pprint
 
-    from src import constants
+    from src.training.common import load_dataframes
     from src.utils.common import trace
 
-    yad_df = pl.read_csv(constants.INPUT_DIR / "yado.csv")
+    dfs = load_dataframes().sample(n=1000)
     with trace("making yad features..."):
-        yad_features_df = make_yad_features(yad_df)
+        yad_features_df = make_yad_features(log_df=pl.concat([dfs.train_log_df, dfs.test_log_df]), yad_df=dfs.yad_df)
         print(yad_features_df)
 
     pprint.pprint(yad_features_df.columns)

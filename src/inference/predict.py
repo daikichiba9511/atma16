@@ -48,8 +48,10 @@ def predict(
     )
 
     logger.info(f"dataset: {dataset}")
+    logger.info(f"dataset rows num / session_ids num: {dataset.group_by('session_id').count()}")
     if phase == "train":
         dataset.write_csv(constants.OUTPUT_DIR / "dataset.csv")
+
 
     # 予測
     y_preds = np.zeros((len(dataset), 1))

@@ -4,6 +4,7 @@ import joblib
 import numpy as np
 import polars as pl
 import xgboost as xgb
+from gensim.models import word2vec
 
 from src import constants
 from src.config.common import load_config
@@ -49,6 +50,7 @@ def main():
         "ken_cd": joblib.load(constants.OUTPUT_DIR / cfg.name / "ken_cd_encoder.pkl"),
         "lrg_cd": joblib.load(constants.OUTPUT_DIR / cfg.name / "lrg_cd_encoder.pkl"),
         "sml_cd": joblib.load(constants.OUTPUT_DIR / cfg.name / "sml_cd_encoder.pkl"),
+        "word2vec": word2vec.Word2Vec.load(str(constants.OUTPUT_DIR / cfg.name / "word2vec")),
     }
     covisit_matrix = np.load(constants.OUTPUT_DIR / "covisit" / "covisit_matrix.npy")
     with utils_common.trace("predicting..."):
@@ -58,8 +60,8 @@ def main():
             dfs,
             covisit_matrix=covisit_matrix,
             encoders=encoders,
-            # phase="train",
-            phase="test",
+            phase="train",
+            # phase="test",
         )
         sub = make_submission(preds)
 
@@ -81,7 +83,7 @@ def main():
         on="session_id",
     )
     print(oof_cv_df)
-    print(oof_cv_df.filter(pl.col("yad_no") == pl.col("predict"))["session_id"].unique().shape[0] / oof_cv_df["session_id"].unique().shape[0])
+    print("rate of label in predict: ", oof_cv_df.filter(pl.col("yad_no") == pl.col("predict"))["session_id"].unique().shape[0] / oof_cv_df["session_id"].unique().shape[0])
 
     oof_cv_df.write_csv(constants.OUTPUT_DIR / args.config / f"cv_fold{args.fold}.csv")
 
