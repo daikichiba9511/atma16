@@ -38,34 +38,40 @@ def make_session2area_yado_list(log: pl.DataFrame, yado: pl.DataFrame, cfg: Conf
             pl.col("sml_cd"),
             pl.col("lrg_cd"),
             pl.col("ken_cd"),
+            pl.col("wid_cd"),
         )
         .with_columns(
             pl.col("sml_cd").list.unique().alias("sml_uni_cd"),
             pl.col("lrg_cd").list.unique().alias("lrg_uni_cd"),
             pl.col("ken_cd").list.unique().alias("ken_uni_cd"),
+            pl.col("wid_cd").list.unique().alias("wid_uni_cd"),
         )
         .with_columns(
             pl.col("sml_uni_cd").list.len().alias("num_unique_sml_cd"),
             pl.col("lrg_uni_cd").list.len().alias("num_unique_lrg_cd"),
             pl.col("ken_uni_cd").list.len().alias("num_unique_ken_cd"),
+            pl.col("wid_uni_cd").list.len().alias("num_unique_wid_cd"),
         )
     )
     session2area_cd_0 = session2area_cd_list.with_columns(
         pl.col("sml_uni_cd").list.get(0).alias("session_interested_in_sml_cd_0"),
         pl.col("lrg_uni_cd").list.get(0).alias("session_interested_in_lrg_cd_0"),
         pl.col("ken_uni_cd").list.get(0).alias("session_interested_in_ken_cd_0"),
-    ).drop(["sml_uni_cd", "lrg_uni_cd", "ken_uni_cd"])
+        pl.col("wid_uni_cd").list.get(0).alias("session_interested_in_wid_cd_0"),
+    ).drop(["sml_uni_cd", "lrg_uni_cd", "ken_uni_cd", "wid_uni_cd"])
     for phase in ["train", "test"]:
         for area_col_name in [
             "top10_sml_popular_yado",
             "top10_lrg_popular_yado",
             "top10_ken_popular_yado",
+            "top10_wid_popular_yado"
         ]:
             candidates = pl.read_parquet(cfg.output_candidates_dir / f"{phase}_{area_col_name}_candidates.parquet")
             area_cd = {
                 "top10_sml_popular_yado": "sml_cd",
                 "top10_lrg_popular_yado": "lrg_cd",
                 "top10_ken_popular_yado": "ken_cd",
+                "top10_wid_popular_yado": "wid_cd",
             }[area_col_name]
             area2yad_list = (
                 candidates.group_by(area_cd)
@@ -80,15 +86,17 @@ def make_session2area_yado_list(log: pl.DataFrame, yado: pl.DataFrame, cfg: Conf
         "session_interested_in_sml_cd_0",
         "session_interested_in_lrg_cd_0",
         "session_interested_in_ken_cd_0",
+        "session_interested_in_wid_cd_0",
         "num_unique_sml_cd",
         "num_unique_lrg_cd",
         "num_unique_ken_cd",
+        "num_unique_wid_cd",
         "sml_cd_yad_no_list",
         "lrg_cd_yad_no_list",
         "ken_cd_yad_no_list",
+        "wid_cd_yad_no_list",
     ])
     return session2area_cd_0
-
 
 
 def main() -> None:
@@ -115,8 +123,9 @@ def main() -> None:
         "top10_sml_popular_yado_candidates",
         "top10_lrg_popular_yado_candidates",
         "top10_ken_popular_yado_candidates",
-        # "top10_wid_popular_yado_candidates"
-        "co_visit_matrix_topk_candidates"
+        "top10_wid_popular_yado_candidates",
+        "co_visit_matrix_topk_candidates",
+        "log_next_seq_candidates",
     ]
 
     session2area_yado_list = make_session2area_yado_list(pl.concat([train_log, test_log]), yado, cfg)
@@ -185,11 +194,13 @@ def main() -> None:
                                     "top10_sml_popular_yado_candidates",
                                     "top10_lrg_popular_yado_candidates",
                                     "top10_ken_popular_yado_candidates",
+                                    "top10_wid_popular_yado_candidates"
                                 ]:
                                     area_cd = {
                                         "top10_sml_popular_yado_candidates": "sml_cd",
                                         "top10_lrg_popular_yado_candidates": "lrg_cd",
                                         "top10_ken_popular_yado_candidates": "ken_cd",
+                                        "top10_wid_popular_yado_candidates": "wid_cd"
                                     }[candidate_name]
                                     session2area_yad_ranking = session2area_yado_list.select([
                                         "session_id",
@@ -226,11 +237,13 @@ def main() -> None:
                             "top10_sml_popular_yado_candidates",
                             "top10_lrg_popular_yado_candidates",
                             "top10_ken_popular_yado_candidates",
+                            "top10_wid_popular_yado_candidates"
                         ]:
                             area_cd = {
                                 "top10_sml_popular_yado_candidates": "sml_cd",
                                 "top10_lrg_popular_yado_candidates": "lrg_cd",
                                 "top10_ken_popular_yado_candidates": "ken_cd",
+                                "top10_wid_popular_yado_candidates": "wid_cd"
                             }[candidate_name]
                             session2area_yad_ranking = session2area_yado_list.select([
                                 "session_id",
@@ -323,9 +336,7 @@ def main() -> None:
                     train_candidates = train_candidates.join(feature, how="left", on=["session_id", "yad_no"])
                 elif "latest_yad_no" in feature.columns:
                     if "fold" not in feature.columns:
-                        train_candidates = train_candidates.join(
-                            feature, how="left", on=["latest_yad_no", "yad_no"]
-                        )
+                        train_candidates = train_candidates.join(feature, how="left", on=["latest_yad_no", "yad_no"])
                     else:
                         train_candidates = train_candidates.join(
                             feature, how="left", on=["latest_yad_no", "fold", "yad_no"]
@@ -407,6 +418,7 @@ def main() -> None:
     )
 
     # logをつかってsessionを特徴づける
+
     session2yado_list = pl.concat([train_log, test_log]).group_by("session_id").agg(pl.col("yad_no"))
     word2vec_model = word2vec.Word2Vec(
         session2yado_list["yad_no"].to_list(), vector_size=10, window=5, min_count=1, workers=4
@@ -437,9 +449,11 @@ def main() -> None:
             "session_interested_in_sml_cd_0",
             "session_interested_in_lrg_cd_0",
             "session_interested_in_ken_cd_0",
+            "session_interested_in_wid_cd_0",
             "num_unique_sml_cd",
             "num_unique_lrg_cd",
             "num_unique_ken_cd",
+            "num_unique_wid_cd"
         ]),
         on="session_id",
         how="left",
@@ -450,9 +464,11 @@ def main() -> None:
             "session_interested_in_sml_cd_0",
             "session_interested_in_lrg_cd_0",
             "session_interested_in_ken_cd_0",
+            "session_interested_in_wid_cd_0",
             "num_unique_sml_cd",
             "num_unique_lrg_cd",
             "num_unique_ken_cd",
+            "num_unique_wid_cd"
         ]),
         on="session_id",
         how="left",
@@ -462,11 +478,13 @@ def main() -> None:
         (pl.col("session_interested_in_sml_cd_0") == pl.col("sml_cd")).alias("is_same_sml_cd").cast(pl.Int8),
         (pl.col("session_interested_in_ken_cd_0") == pl.col("ken_cd")).alias("is_same_lrg_cd").cast(pl.Int8),
         (pl.col("session_interested_in_lrg_cd_0") == pl.col("lrg_cd")).alias("is_same_ken_cd").cast(pl.Int8),
+        (pl.col("session_interested_in_wid_cd_0") == pl.col("wid_cd")).alias("is_same_wid_cd").cast(pl.Int8),
     )
     test_candidates = test_candidates.with_columns(
         (pl.col("session_interested_in_sml_cd_0") == pl.col("sml_cd")).alias("is_same_sml_cd").cast(pl.Int8),
         (pl.col("session_interested_in_ken_cd_0") == pl.col("ken_cd")).alias("is_same_lrg_cd").cast(pl.Int8),
         (pl.col("session_interested_in_lrg_cd_0") == pl.col("lrg_cd")).alias("is_same_ken_cd").cast(pl.Int8),
+        (pl.col("session_interested_in_wid_cd_0") == pl.col("wid_cd")).alias("is_same_wid_cd").cast(pl.Int8),
     )
 
     # yadoを特徴づける
@@ -593,6 +611,108 @@ def main() -> None:
         "wid_cd_right",
     ])
 
+    # sessionを探してる宿の部屋数の統計で特徴づける
+    # 探してる宿はある程度似通ってるなら部屋数にも相関があるのでは？
+    # TODO: labelの情報を入れるか迷う。
+    session2total_romm_cnt_list = (
+        pl.concat([train_log, test_log]).with_columns(pl.col("yad_no").cast(pl.UInt32)).join(yado.select(["yad_no", "total_room_cnt"]), on="yad_no", how="left")
+        .group_by("session_id").agg(pl.col("total_room_cnt")).with_columns(
+            pl.col("total_room_cnt").map_elements(lambda x: np.mean(x.to_numpy())).alias("session_mean_total_room_cnt"),
+            pl.col("total_room_cnt").map_elements(lambda x: np.std(x.to_numpy())).alias("session_std_total_room_cnt"),
+            pl.col("total_room_cnt").map_elements(lambda x: np.median(x.to_numpy())).alias("session_median_total_room_cnt"),
+            pl.col("total_room_cnt").map_elements(lambda x: np.min(x.to_numpy())).alias("session_min_total_room_cnt"),
+            pl.col("total_room_cnt").map_elements(lambda x: np.max(x.to_numpy())).alias("session_max_total_room_cnt"),
+        )
+        .drop("total_room_cnt")
+    )
+    train_candidates = train_candidates.join(session2total_romm_cnt_list, on="session_id", how="left").with_columns(
+        (pl.col("total_room_cnt") - pl.col("session_mean_total_room_cnt")).alias("diff_total_room_cnt_with_session_mean_room_cnt"),
+        (pl.col("total_room_cnt") - pl.col("session_median_total_room_cnt")).alias("diff_total_room_cnt_with_session_median_room_cnt"),
+        (pl.col("total_room_cnt") - pl.col("session_min_total_room_cnt")).alias("diff_total_room_cnt_with_session_min_room_cnt"),
+        (pl.col("total_room_cnt") - pl.col("session_max_total_room_cnt")).alias("diff_total_room_cnt_with_session_max_room_cnt"),
+    )
+    test_candidates = test_candidates.join(session2total_romm_cnt_list, on="session_id", how="left").with_columns(
+        (pl.col("total_room_cnt") - pl.col("session_mean_total_room_cnt")).alias("diff_total_room_cnt_with_session_mean_room_cnt"),
+        (pl.col("total_room_cnt") - pl.col("session_median_total_room_cnt")).alias("diff_total_room_cnt_with_session_median_room_cnt"),
+        (pl.col("total_room_cnt") - pl.col("session_min_total_room_cnt")).alias("diff_total_room_cnt_with_session_min_room_cnt"),
+        (pl.col("total_room_cnt") - pl.col("session_max_total_room_cnt")).alias("diff_total_room_cnt_with_session_max_room_cnt"),
+    )
+
+    for seq in range(8):
+        seq_yad_no = (
+            train_log.filter(pl.col("seq_no") == seq)
+            .select(["session_id", "yad_no"])
+            .rename({"yad_no": f"seq_{seq}_yad_no"})
+        )
+        train_candidates = train_candidates.join(seq_yad_no, how="left", on="session_id")
+
+        seq_yad_no = (
+            test_log.filter(pl.col("seq_no") == seq)
+            .select(["session_id", "yad_no"])
+            .rename({"yad_no": f"seq_{seq}_yad_no"})
+        )
+        test_candidates = test_candidates.join(seq_yad_no, how="left", on="session_id")
+
+    # 宿ごとに何回目に見られることが多いかの統計値, 素の値との差分
+    train_yad2seq_no = (
+        train_log.group_by(["yad_no"])
+        .agg(pl.col("seq_no"))
+        .with_columns(
+            pl.col("seq_no").map_elements(lambda x: np.mean(x.to_numpy())).alias("mean_seq_no"),
+            pl.col("seq_no").map_elements(lambda x: np.std(x.to_numpy())).alias("std_seq_no"),
+            pl.col("seq_no").map_elements(lambda x: np.median(x.to_numpy())).alias("median_seq_no"),
+        )
+        .drop("seq_no")
+        .with_columns(pl.col("yad_no").cast(pl.UInt32))
+    )
+    train_candidates = train_candidates.join(train_yad2seq_no, on="yad_no", how="left").with_columns(
+        (pl.col("max_seq_no") - pl.col("mean_seq_no")).alias("diff_max_mean_seq_no"),
+        (pl.col("max_seq_no") - pl.col("median_seq_no")).alias("diff_max_median_seq_no"),
+    )
+
+    test_yad2seq_no = (
+        pl.concat([train_log, test_log])
+        .group_by(["yad_no"])
+        .agg(pl.col("seq_no"))
+        .with_columns(
+            # pl.col("seq_no").map_elements(lambda x: print(x)),
+            pl.col("seq_no").map_elements(lambda x: np.mean(x.to_numpy())).alias("mean_seq_no"),
+            pl.col("seq_no").map_elements(lambda x: np.std(x.to_numpy())).alias("std_seq_no"),
+            pl.col("seq_no").map_elements(lambda x: np.median(x.to_numpy())).alias("median_seq_no"),
+        )
+        .drop("seq_no")
+        .with_columns(pl.col("yad_no").cast(pl.UInt32))
+    )
+    test_candidates = test_candidates.join(test_yad2seq_no, on="yad_no", how="left").with_columns(
+        (pl.col("max_seq_no") - pl.col("mean_seq_no")).alias("diff_max_mean_seq_no"),
+        (pl.col("max_seq_no") - pl.col("median_seq_no")).alias("diff_max_median_seq_no"),
+    )
+
+    # 写真のデータでyadoを特徴づける
+    yado2img_features = (
+        dfs.image_embeddings_df
+        .group_by("yad_no")
+        .agg("category")
+        .with_columns(
+            pl.col("category").list.unique().alias("unique_category"),
+        ).with_columns(
+            pl.col("category").list.len().alias("num_image"),
+            pl.col("unique_category").list.len().alias("num_unique_category"),
+        ).join(
+            dfs.image_embeddings_df
+            .group_by(["yad_no", "category"])
+            .count()
+            .pivot(index="yad_no", columns="category", values="count"),
+            how="left",
+            on="yad_no"
+        )
+        .sort("yad_no")
+        .drop(["category", "unique_category"])
+        .fill_null(0)
+        .with_columns(pl.col("yad_no").cast(pl.UInt32))
+    )
+    train_candidates = train_candidates.join(yado2img_features, on="yad_no", how="left")
+    test_candidates = test_candidates.join(yado2img_features, on="yad_no", how="left")
 
     print(train_candidates)
     pprint.pprint(train_candidates.columns)

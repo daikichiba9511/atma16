@@ -262,6 +262,26 @@ def make_co_visit_matrix(df: pl.DataFrame) -> pl.DataFrame:
     return df
 
 
+def make_next_yad_no_candidates_at_a_seq_no(log: pl.DataFrame, k: int = 10) -> pl.DataFrame:
+    log_next_seq = (
+        log.with_columns(pl.col("seq_no") + 1)
+        .select(["session_id", "seq_no", "yad_no"])
+        .rename({"yad_no": "next_yad_no"})
+    )
+    log_next_seq = log.join(log_next_seq, how="left", on=["session_id", "seq_no"])
+    log_next_seq = log_next_seq.filter(pl.col("next_yad_no").is_not_null())
+    # | latest_yad_no | yad_no | count |
+    log_next_seq_candidates = (
+        log_next_seq.group_by(["yad_no", "next_yad_no"])
+        .count()
+        .sort(by=["yad_no", "count"], descending=[False, True])
+        .group_by("yad_no")
+        .head(k)
+        .rename({"yad_no": "latest_yad_no", "next_yad_no": "yad_no"})
+    )
+    return log_next_seq_candidates
+
+
 if __name__ == "__main__":
     # 実行
     train_past_view_yado_candidates, train_past_view_yado_features = make_past_view_yado_candidates_and_feats(
@@ -327,6 +347,7 @@ if __name__ == "__main__":
         test_latest_next_booking_top20_features,
     ) = make_latest_next_booking_topk_candiddates(test_log, label, phase="test", k=20)
 
+    # 共起行列
     train_co_visit_matrix = make_co_visit_matrix(
         pl.concat([train_log.select(["session_id", "yad_no"]), label.select(["session_id", "yad_no"])])
     )
@@ -349,6 +370,40 @@ if __name__ == "__main__":
         .group_by("latest_yad_no")
         .head(10)
     )
+    # cold start用共起行列(logが一回以下のsessionのみ)
+    train_co_visit_matrix_for_cold_start = make_co_visit_matrix(train_log.filter(pl.col("seq_no") <= 1))
+    test_co_visit_matrix_for_cold_start = make_co_visit_matrix(
+        pl.concat([train_log, test_log]).filter(pl.col("seq_no") <= 1)
+    )
+    train_co_visit_matrix_topk_candidates_for_cold_start = (
+        train_co_visit_matrix_for_cold_start.sort(["latest_yad_no", "co_visit_count"], descending=[False, True])
+        .group_by("latest_yad_no")
+        .head(10)
+    )
+    test_co_visit_matrix_topk_candidates_for_cold_start = (
+        test_co_visit_matrix_for_cold_start.sort(["latest_yad_no", "co_visit_count"], descending=[False, True])
+        .group_by("latest_yad_no")
+        .head(10)
+    )
+
+    # cold start用共起行列(logが一回未満のsessionのみ)
+    train_co_visit_matrix_for_cold_start_less_than_1 = make_co_visit_matrix(train_log.filter(pl.col("seq_no") < 1))
+    test_co_visit_matrix_for_cold_start_less_than_1 = make_co_visit_matrix(
+        pl.concat([train_log, test_log]).filter(pl.col("seq_no") < 1)
+    )
+    train_co_visit_matrix_topk_candidates_for_cold_start_less_than_1 = (
+        train_co_visit_matrix_for_cold_start.sort(["latest_yad_no", "co_visit_count"], descending=[False, True])
+        .group_by("latest_yad_no")
+        .head(10)
+    )
+    test_co_visit_matrix_topk_candidates_for_cold_start_less_than_1 = (
+        test_co_visit_matrix_for_cold_start.sort(["latest_yad_no", "co_visit_count"], descending=[False, True])
+        .group_by("latest_yad_no")
+        .head(10)
+    )
+
+    train_log_next_seq_candidates = make_next_yad_no_candidates_at_a_seq_no(train_log, k=10)
+    test_log_next_seq_candidates = make_next_yad_no_candidates_at_a_seq_no(test_log, k=10)
 
     # parquetで保存
     # saveする前にミスを減らすために既存の特徴量/候補ファイルは削除
@@ -383,6 +438,15 @@ if __name__ == "__main__":
         # 共起行列から候補生成
         (train_co_visit_matrix_topk_candidates, "train_co_visit_matrix_topk_candidates"),
         (test_co_visit_matrix_topk_candidates, "test_co_visit_matrix_topk_candidates"),
+        # yad_no単位で次のseq_noでどのyad_noがでやすいか、上位k個
+        (train_log_next_seq_candidates, "train_log_next_seq_candidates"),
+        (test_log_next_seq_candidates, "test_log_next_seq_candidates"),
+        # cold start用共起行列(logが一回以下のsessionのみ)
+        (train_co_visit_matrix_for_cold_start, "train_co_visit_matrix_for_cold_start"),
+        (test_co_visit_matrix_for_cold_start, "test_co_visit_matrix_for_cold_start"),
+        # cold start用共起行列(logが一回未満のsessionのみ)
+        (train_co_visit_matrix_for_cold_start_less_than_1, "train_co_visit_matrix_for_cold_start_less_than_1"),
+        (test_co_visit_matrix_for_cold_start_less_than_1, "test_co_visit_matrix_for_cold_start_less_than_1"),
     ]
     for df, name in save_candidates:
         df.write_parquet(cfg.outpput_candidates_dir / f"{name}.parquet")

@@ -21,7 +21,7 @@ LOGGER = get_root_logger(INFO)
 
 @dataclasses.dataclass
 class Config:
-    name = "exp004"
+    name = "exp005"
     seed: int = 42
     n_splits: int = 5
 
@@ -37,6 +37,7 @@ class Config:
             "session_interested_in_sml_cd_0",
             "session_interested_in_lrg_cd_0",
             "session_interested_in_ken_cd_0",
+            "session_interested_in_wid_cd_0",
             "latest_ken_cd",
             "latest_lrg_cd",
             "latest_sml_cd",
@@ -123,12 +124,12 @@ def main() -> None:
         "objective": "binary:logistic",
         "tree_method": "hist",
         "random_state": 42,
-        # "max_depth": 8,
+        "max_depth": 5,
         "learning_rate": 0.1,
         "verbosity": 1,
         "device": "cuda",  # gpuでの学習に必要
-        # "subsample": 0.8,
-        # "colsample_bytree": 0.8,
+        "subsample": 0.95,
+        "colsample_bytree": 0.95,
         "eval_metric": "auc",
         # "scale_pos_weight": 30,
     }
@@ -209,6 +210,9 @@ def main() -> None:
         oof = pd.concat([oof, x_valid[["session_id", "predict", "yad_no"]]], axis=0)
 
     oof = oof.sort_values(["session_id", "predict"], ascending=False)
+
+    oof.to_csv(str(cfg.output_dir / "oof.csv"), index=False)
+
     oof_ = create_top_10_yad_predict(oof)
     label = pd.read_csv(constants.INPUT_DIR / "train_label.csv")
     score = mapk(
